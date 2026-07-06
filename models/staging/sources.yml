@@ -4,4 +4,4 @@ sources:
     description: External Tables via PolyBase (Parquet from ADLS)
     database: "{{ target.database }}"
     schema: stg
-    tables:
+    tables: []
