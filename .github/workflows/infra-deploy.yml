@@ -167,7 +167,11 @@ jobs:
       # Requires the "Allow Azure Services" firewall rule (default on) so the GitHub-hosted
       # runner can reach the server. -b makes sqlcmd fail the step on SQL errors; -l 60
       # allows a serverless database time to resume from auto-pause.
-      - name: Configure external data source (per deployed database)
+      #
+      # Runs setup_schemas.sql before setup_external_source.sql so a fresh database is
+      # fully ready for `dbt run` right after this workflow finishes — no manual SQL step
+      # should be needed afterwards.
+      - name: Configure schemas and external data source (per deployed database)
         if: '${{ inputs.what_if_only == false }}'
         env:
           SQLCMDPASSWORD: '${{ secrets.SQL_ADMIN_PASSWORD }}'
@@ -178,6 +182,12 @@ jobs:
           [ "$DEPLOY_TEST" = "true" ] && DBS+=("$DATABASE_BASE_NAME-test")
 
           for DB in "${DBS[@]}"; do
+            echo "Creating schemas on $DB"
+            sqlcmd -S "${{ steps.deploy.outputs.sql_server_fqdn }}" -d "$DB" \
+              -U "$SQL_ADMIN_LOGIN" \
+              -l 60 -b \
+              -i scripts/setup_schemas.sql
+
             echo "Configuring external data source on $DB"
             sqlcmd -S "${{ steps.deploy.outputs.sql_server_fqdn }}" -d "$DB" \
               -U "$SQL_ADMIN_LOGIN" \

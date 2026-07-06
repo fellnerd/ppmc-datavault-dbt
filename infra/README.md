@@ -20,18 +20,40 @@ for managed-identity-based external data sources.
   Contributor` (or Reader) on the storage account, so `CREATE EXTERNAL DATA
   SOURCE ... CREDENTIAL = [managed_identity]` actually works.
 
-After the Bicep deployment, the workflow also runs
-[`../scripts/setup_external_source.sql`](../scripts/setup_external_source.sql)
-against each deployed database — this creates the master key, the
-`managed_identity` database-scoped credential, the `ParquetFormat` external
-file format, and the `StageFileSystem` external data source (matching the
-names expected by `models/staging/sources.yml`).
+After the Bicep deployment, the workflow also runs, against each deployed
+database:
 
-This post-deploy step authenticates with the **SQL admin login** created by
+1. [`../scripts/setup_schemas.sql`](../scripts/setup_schemas.sql) — creates
+   the `stg`/`vault`/`mart` schemas.
+2. [`../scripts/setup_external_source.sql`](../scripts/setup_external_source.sql)
+   — creates the master key, the `managed_identity` database-scoped
+   credential, the `ParquetFormat` external file format, and the
+   `StageFileSystem` external data source (matching the names expected by
+   `models/staging/sources.yml`).
+
+A freshly deployed database is ready for `dbt debug` and `dbt run` right
+after the workflow finishes — no manual SQL step should be needed. If you
+still had to run either script by hand, that's a gap worth reporting/fixing
+in the boilerplate.
+
+These post-deploy steps authenticate with the **SQL admin login** created by
 the Bicep deployment (`sql_admin_login` + the `SQL_ADMIN_PASSWORD` secret) —
 the deploying service principal does **not** need to be a member of the AAD
-admin group. It reaches the server through the "Allow Azure Services"
+admin group. They reach the server through the "Allow Azure Services"
 firewall rule, which GitHub-hosted runners (running in Azure) pass through.
+
+**Local `dbt run` also needs firewall access.** The server only allows Azure
+services by default — your workstation's IP is not automatically allowed.
+Add it once:
+
+```bash
+az sql server firewall-rule create \
+  --resource-group <resource-group-name> \
+  --server <sql-server-name> \
+  --name "local-dev-$(whoami)" \
+  --start-ip-address "$(curl -s https://api.ipify.org)" \
+  --end-ip-address "$(curl -s https://api.ipify.org)"
+```
 
 ---
 
