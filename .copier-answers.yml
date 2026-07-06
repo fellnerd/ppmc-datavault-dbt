@@ -1,6 +1,6 @@
 # This file is managed by Copier — do not delete it. It records the answers given
 # when this project was generated and is required for `copier update` to work.
-_commit: v1.0.6
+_commit: v1.0.7
 _src_path: gh:fellnerd/datavault-dbt-boilerplate
 author_name: Daniel Fellner, MSc
 company_name: ppmc ag
