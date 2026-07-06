@@ -33,50 +33,125 @@ the deploying service principal does **not** need to be a member of the AAD
 admin group. It reaches the server through the "Allow Azure Services"
 firewall rule, which GitHub-hosted runners (running in Azure) pass through.
 
-## Prerequisites
+---
 
-0. **Resource providers are registered on the subscription** (one-time per
-   subscription; a fresh subscription fails with `MissingSubscriptionRegistration`
-   otherwise). The service principal cannot do this itself — it is only
-   RG-scoped. Run once as a subscription admin:
+## One-time setup checklist (do this before the first run)
 
-   ```bash
-   az provider register --namespace Microsoft.Sql
-   az provider register --namespace Microsoft.Storage
-   # check: az provider show -n Microsoft.Sql --query registrationState
-   ```
+Everything below is a **one-time setup per environment/subscription**, not
+per deployment run. Skip a step if it's already done (e.g. the resource
+group or AAD group already exists from a previous project).
 
-1. **An Azure AD group already exists** to use as the SQL Server's AAD admin
-   — this template does not create AAD groups. You'll need its display name
-   and object ID.
-2. **The target resource group already exists.** The workflow deploys *into*
-   a resource group (`az deployment group create`); it does not create one.
-3. **The deploying service principal has enough rights**, specifically:
-   - Rights to create SQL servers/databases and storage accounts (e.g.
-     `Contributor`).
-   - `Microsoft.Authorization/roleAssignments/write` on the storage account
-     to grant the RBAC role — this is **stricter than `Contributor`** and
-     commonly the cause of a failed deployment if missing. You need e.g.
-     `User Access Administrator` or `Owner` on the storage account (or its
-     resource group).
+Fill in your own values for anything in `<angle brackets>`. Run these with
+an account that has enough rights in the subscription (Owner or
+User Access Administrator + Contributor) — creating service principals and
+role assignments needs more than plain Contributor.
 
-## Required GitHub secrets
+### 1. Register the Azure resource providers (once per subscription)
 
-| Secret | Purpose |
+A fresh subscription has not "activated" every resource type yet — deploying
+without this fails with `MissingSubscriptionRegistration`, and the
+deployment's own service principal can't fix this itself (it's scoped to a
+resource group, not the whole subscription).
+
+```bash
+az provider register --namespace Microsoft.Sql
+az provider register --namespace Microsoft.Storage
+# wait until both report "Registered" (can take a minute):
+az provider show --namespace Microsoft.Sql --query registrationState -o tsv
+az provider show --namespace Microsoft.Storage --query registrationState -o tsv
+```
+
+### 2. Create (or identify) the AAD admin group
+
+This group becomes the SQL Server's Azure AD admin. If you already have a
+suitable group, just note its name and object ID and skip creating a new one.
+
+```bash
+az ad group create \
+  --display-name "<sql-admin-group-name>" \
+  --mail-nickname "<sql-admin-group-name>"
+
+# add yourself (or whoever should administer the databases):
+az ad group member add \
+  --group "<sql-admin-group-name>" \
+  --member-id "$(az ad signed-in-user show --query id -o tsv)"
+
+# note the object ID for later:
+az ad group show --group "<sql-admin-group-name>" --query id -o tsv
+```
+
+### 3. Create the resource group
+
+```bash
+az group create --name "<resource-group-name>" --location "switzerlandnorth"
+```
+
+### 4. Create a service principal for GitHub Actions, scoped to that resource group
+
+```bash
+az ad sp create-for-rbac \
+  --name "<sp-name, e.g. sp-github-datavault>" \
+  --role Contributor \
+  --scopes "/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>"
+```
+
+This prints `appId`, `password`, and `tenant` — save them, `password` is
+shown only once. Then add the second role (needed for the RBAC step in the
+Bicep deployment — plain Contributor is **not** enough for this):
+
+```bash
+az role assignment create \
+  --assignee "<appId from above>" \
+  --role "User Access Administrator" \
+  --scope "/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>"
+```
+
+Both roles are scoped to this one resource group only, not the subscription.
+
+### 5. Pick globally unique names, and check them before deploying
+
+SQL Server names and storage account names are unique across **all of
+Azure**, not just your subscription — a generic name is very likely already
+taken by someone else. The Copier-generated defaults
+(`ppmcag-datavault`, `stdatavault001`) are a
+starting point, not a guarantee. Check before you deploy:
+
+```bash
+az storage account check-name --name "<storage-account-name>"
+# SQL server name uniqueness surfaces as a deployment error if taken; there's
+# no equivalent standalone check-name command, so pick something distinctive
+# (e.g. include your org name) rather than verifying in advance.
+```
+
+### 6. Set the 5 required GitHub secrets
+
+```bash
+gh secret set AZURE_CLIENT_ID -R <org>/<repo> --body "<appId>"
+gh secret set AZURE_CLIENT_SECRET -R <org>/<repo> --body "<password>"
+gh secret set AZURE_TENANT_ID -R <org>/<repo> --body "<tenant>"
+gh secret set AZURE_SUBSCRIPTION_ID -R <org>/<repo> --body "<subscription-id>"
+gh secret set SQL_ADMIN_PASSWORD -R <org>/<repo> --body "<a-strong-generated-password>"
+```
+
+| Secret | Where it comes from |
 |---|---|
-| `AZURE_CLIENT_ID` | Service principal used by `azure/login` |
-| `AZURE_CLIENT_SECRET` | ditto |
-| `AZURE_TENANT_ID` | ditto |
-| `AZURE_SUBSCRIPTION_ID` | ditto |
-| `SQL_ADMIN_PASSWORD` | Password for the secondary SQL admin login (`sqlAdminLogin`) |
+| `AZURE_CLIENT_ID` | `appId` from step 4 |
+| `AZURE_CLIENT_SECRET` | `password` from step 4 (shown once — regenerate with `az ad sp credential reset --id <appId>` if lost) |
+| `AZURE_TENANT_ID` | `tenant` from step 4, or `az account show --query tenantId -o tsv` |
+| `AZURE_SUBSCRIPTION_ID` | `az account show --query id -o tsv` |
+| `SQL_ADMIN_PASSWORD` | You choose this — it becomes the secondary SQL admin login's password. Not recoverable once set (GitHub secrets can't be read back); store it in your password manager too. |
 
-## How to trigger
+Verify: `gh secret list -R <org>/<repo>` should show all 5.
+
+---
+
+## How to trigger a deployment
 
 GitHub -> Actions -> **Deploy Azure Infrastructure** -> "Run workflow", then
-fill in: resource group, AAD admin group name/object ID, which of the three
-databases to deploy (three separate checkboxes — GitHub Actions has no true
-multi-select, so each database is its own toggle), and whether to create a
-new storage account or use an existing one.
+fill in: resource group, AAD admin group name/object ID (from step 2 above),
+which of the three databases to deploy (three separate checkboxes — GitHub
+Actions has no true multi-select, so each database is its own toggle), and
+whether to create a new storage account or use an existing one.
 
 **Recommended first run:** tick `what_if_only` to preview the changes
 (`az deployment group what-if`) before actually applying them.
@@ -112,6 +187,8 @@ not the tables themselves.
 - **MFA policy vs. local CLI:** Azure now enforces MFA for *user accounts*
   on resource writes — a plain `az login` session may get
   `RequestDisallowedByAzure ... MFA` errors when creating resource groups
-  or deploying locally. Re-login interactively with MFA if that happens.
-  The GitHub Actions workflow is unaffected: it authenticates as a service
-  principal, and the MFA requirement does not apply to workload identities.
+  or deploying locally. Re-login interactively with MFA if that happens
+  (`az login` without `--use-device-code` if device code flow is blocked by
+  a Conditional Access policy — error 53003). The GitHub Actions workflow is
+  unaffected: it authenticates as a service principal, and neither MFA nor
+  Conditional Access device-registration checks apply to workload identities.

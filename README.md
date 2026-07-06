@@ -219,11 +219,15 @@ CONVERT(CHAR(64), HASHBYTES('SHA2_256',
 Azure infrastructure (SQL Server, the `datavault`/`datavault-dev`/`datavault-test`
 databases, storage account, and the RBAC needed for managed-identity-based
 external data sources) is provisioned via Bicep, triggered through the
-**Deploy Azure Infrastructure** GitHub Actions workflow. Prerequisites:
-an existing Azure AD admin group, an existing resource group, and 5 GitHub
-secrets (`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID`/
-`AZURE_SUBSCRIPTION_ID`/`SQL_ADMIN_PASSWORD`). See [`infra/README.md`](infra/README.md)
-for full details and how to trigger it.
+**Deploy Azure Infrastructure** GitHub Actions workflow.
+
+**Before the first run**, work through the one-time setup checklist in
+[`infra/README.md`](infra/README.md#one-time-setup-checklist-do-this-before-the-first-run)
+— it covers registering Azure resource providers, creating the AAD admin
+group, the resource group, the deploying service principal (with the right
+roles), and all 5 required GitHub secrets (`AZURE_CLIENT_ID`/
+`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID`/
+`SQL_ADMIN_PASSWORD`), with copy-paste `az`/`gh` commands for each step.
 
 ---
 ## Updating from the template
