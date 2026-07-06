@@ -1,0 +1,82 @@
+name: '{{ project_name }}'
+version: '1.0.0'
+config-version: 2
+
+profile: '{{ profile_name }}'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+seeds:
+  {{ project_name }}:
+    +schema: seed
+
+vars:
+  # Hash algorithm: MD5 (16 byte) or SHA (32 byte)
+  hash: '{{ hash_algorithm }}'
+
+  # Load date column
+  load_date: 'dss_load_date'
+
+  # Record source column
+  record_source: 'dss_record_source'
+
+# ===========================================
+# SCHEMA NAMING CONVENTION
+# ===========================================
+# [{{ staging_schema }}].[stg_<entity>]                          - Staging Views
+# [{{ schema_prefix }}].[hub|sat|link_<entity>]                  - Cross-source Vault objects (_common)
+# [{{ schema_prefix }}_<source>].[hub|sat|link_<entity>]         - Source-system-specific Vault objects
+# [{{ mart_schema }}].[<object>]                                 - Cross-domain Mart objects
+# [{{ mart_schema }}_<domain>].[<object>]                        - Domain-specific Mart objects
+
+models:
+  {{ project_name }}:
+    staging:
+      +schema: {{ staging_schema }}
+      +materialized: view
+    raw_vault:
+      # ===== COMMON (Schema: {{ schema_prefix }}) =====
+      # Cross-source objects merged from multiple systems
+      _common:
+        hubs:
+          +schema: {{ schema_prefix }}
+          +materialized: incremental
+          +incremental_strategy: append
+          +on_schema_change: append_new_columns
+        satellites:
+          +schema: {{ schema_prefix }}
+          +materialized: incremental
+          +incremental_strategy: append
+          +on_schema_change: append_new_columns
+        links:
+          +schema: {{ schema_prefix }}
+          +materialized: incremental
+          +incremental_strategy: append
+          +on_schema_change: append_new_columns
+{% if include_example %}
+      # ===== ADVENTUREWORKS DEMO (Schema: {{ schema_prefix }}_adworks) =====
+      adworks:
+        +schema: {{ schema_prefix }}_adworks
+        +materialized: incremental
+        +incremental_strategy: append
+        +as_columnstore: false
+        +on_schema_change: append_new_columns
+{% endif %}
+    business_vault:
+      +schema: {{ schema_prefix }}
+      +materialized: table
+    mart:
+      # ===== COMMON (Schema: {{ mart_schema }}) =====
+      _common:
+        +schema: {{ mart_schema }}
+        +materialized: table
+        +as_columnstore: false
