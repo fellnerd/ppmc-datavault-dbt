@@ -15,7 +15,7 @@ on:
       sql_server_name:
         description: 'SQL logical server name'
         required: true
-        default: 'sql-datavault-001'
+        default: 'ppmcag-datavault'
         type: string
       aad_admin_group_name:
         description: 'AAD group display name for the SQL Server admin'
@@ -31,17 +31,17 @@ on:
         default: 'sqladmin'
         type: string
       deploy_datavault:
-        description: 'Deploy prod database (datavault-dev)'
+        description: 'Deploy prod database (datavault)'
         required: true
         default: true
         type: boolean
       deploy_datavault_dev:
-        description: 'Deploy dev database (datavault-dev-dev)'
+        description: 'Deploy dev database (datavault-dev)'
         required: true
         default: true
         type: boolean
       deploy_datavault_test:
-        description: 'Deploy test database (datavault-dev-test)'
+        description: 'Deploy test database (datavault-test)'
         required: true
         default: true
         type: boolean
@@ -93,7 +93,7 @@ jobs:
       STORAGE_ACCOUNT_NAME: '${{ inputs.storage_account_name }}'
       STORAGE_CONTAINER_NAME: '${{ inputs.storage_container_name }}'
       EXISTING_STORAGE_RG_INPUT: '${{ inputs.existing_storage_account_resource_group }}'
-      DATABASE_BASE_NAME: 'datavault-dev'
+      DATABASE_BASE_NAME: 'datavault'
       DEPLOY_PROD: '${{ inputs.deploy_datavault }}'
       DEPLOY_DEV: '${{ inputs.deploy_datavault_dev }}'
       DEPLOY_TEST: '${{ inputs.deploy_datavault_test }}'

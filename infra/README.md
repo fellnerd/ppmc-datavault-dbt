@@ -8,8 +8,8 @@ for managed-identity-based external data sources.
 
 - **SQL Server** (`sqlServerName`) with one system-assigned managed identity,
   an AAD admin group, and a secondary SQL auth login (both work side by side).
-- **Databases** — `datavault-dev`, `datavault-dev-dev`,
-  `datavault-dev-test` — each individually toggleable, all serverless
+- **Databases** — `datavault`, `datavault-dev`,
+  `datavault-test` — each individually toggleable, all serverless
   General Purpose with auto-pause.
 - **Firewall** — only the "Allow Azure Services" rule (0.0.0.0/0.0.0.0) by
   default. A fully-open rule (0.0.0.0-255.255.255.255) is available but

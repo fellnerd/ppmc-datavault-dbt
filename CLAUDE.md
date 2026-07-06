@@ -37,9 +37,9 @@ Azure SQL / SQL Server with dbt Core.
 
 | Target | Database | Usage |
 |--------|----------|-------|
-| `dev` | datavault-dev-dev | Development |
-| `test` | datavault-dev-test | Testing |
-| `prod` | datavault-dev | Production |
+| `dev` | datavault-dev | Development |
+| `test` | datavault-test | Testing |
+| `prod` | datavault | Production |
 
 ## Conventions
 

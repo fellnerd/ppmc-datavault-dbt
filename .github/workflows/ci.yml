@@ -60,7 +60,7 @@ jobs:
                 driver: 'ODBC Driver 18 for SQL Server'
                 server: ppmcag-datavault.database.windows.net
                 port: 1433
-                database: datavault-dev-dev
+                database: datavault-dev
                 schema: stg
                 authentication: cli
                 encrypt: true

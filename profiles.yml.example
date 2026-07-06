@@ -14,7 +14,7 @@ datavault:
       driver: 'ODBC Driver 18 for SQL Server'
       server: ppmcag-datavault.database.windows.net
       port: 1433
-      database: datavault-dev-dev
+      database: datavault-dev
       schema: stg
       authentication: cli   # or 'sql' with user/password below
       encrypt: true
@@ -25,7 +25,7 @@ datavault:
       driver: 'ODBC Driver 18 for SQL Server'
       server: ppmcag-datavault.database.windows.net
       port: 1433
-      database: datavault-dev-test
+      database: datavault-test
       schema: stg
       authentication: cli
       encrypt: true
@@ -36,7 +36,7 @@ datavault:
       driver: 'ODBC Driver 18 for SQL Server'
       server: ppmcag-datavault.database.windows.net
       port: 1433
-      database: datavault-dev
+      database: datavault
       schema: stg
       authentication: sql
       user: <SQL_USER>

@@ -19,9 +19,9 @@ Source System -> External Table -> Staging View -> Hub/Sat/Link
 
 | Target | Database | Usage |
 |--------|----------|-------|
-| `dev` | datavault-dev-dev | Development |
-| `test` | datavault-dev-test | Testing |
-| `prod` | datavault-dev | Production |
+| `dev` | datavault-dev | Development |
+| `test` | datavault-test | Testing |
+| `prod` | datavault | Production |
 
 ---
 
@@ -87,7 +87,7 @@ for `dev`/`test` in `profiles.yml.example`).
 | Parameter | Description | Example |
 |-----------|--------------|---------|
 | `server` | Azure SQL Server FQDN | `ppmcag-datavault.database.windows.net` |
-| `database` | Target database | `datavault-dev-dev` |
+| `database` | Target database | `datavault-dev` |
 | `user` | SQL admin user | `sqladmin` |
 | `password` | SQL password | (ask your admin) |
 
@@ -216,7 +216,7 @@ CONVERT(CHAR(64), HASHBYTES('SHA2_256',
 ---
 ## Deploying infrastructure
 
-Azure infrastructure (SQL Server, the `datavault-dev`/`datavault-dev-dev`/`datavault-dev-test`
+Azure infrastructure (SQL Server, the `datavault`/`datavault-dev`/`datavault-test`
 databases, storage account, and the RBAC needed for managed-identity-based
 external data sources) is provisioned via Bicep, triggered through the
 **Deploy Azure Infrastructure** GitHub Actions workflow. Prerequisites:
