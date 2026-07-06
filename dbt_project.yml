@@ -1,0 +1,73 @@
+name: 'datavault'
+version: '1.0.0'
+config-version: 2
+
+profile: 'datavault'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+seeds:
+  datavault:
+    +schema: seed
+
+vars:
+  # Hash algorithm: MD5 (16 byte) or SHA (32 byte)
+  hash: 'SHA'
+
+  # Load date column
+  load_date: 'dss_load_date'
+
+  # Record source column
+  record_source: 'dss_record_source'
+
+# ===========================================
+# SCHEMA NAMING CONVENTION
+# ===========================================
+# [stg].[stg_<entity>]                          - Staging Views
+# [vault].[hub|sat|link_<entity>]                  - Cross-source Vault objects (_common)
+# [vault_<source>].[hub|sat|link_<entity>]         - Source-system-specific Vault objects
+# [mart].[<object>]                                 - Cross-domain Mart objects
+# [mart_<domain>].[<object>]                        - Domain-specific Mart objects
+
+models:
+  datavault:
+    staging:
+      +schema: stg
+      +materialized: view
+    raw_vault:
+      # ===== COMMON (Schema: vault) =====
+      # Cross-source objects merged from multiple systems
+      _common:
+        hubs:
+          +schema: vault
+          +materialized: incremental
+          +incremental_strategy: append
+          +on_schema_change: append_new_columns
+        satellites:
+          +schema: vault
+          +materialized: incremental
+          +incremental_strategy: append
+          +on_schema_change: append_new_columns
+        links:
+          +schema: vault
+          +materialized: incremental
+          +incremental_strategy: append
+          +on_schema_change: append_new_columns
+    business_vault:
+      +schema: vault
+      +materialized: table
+    mart:
+      # ===== COMMON (Schema: mart) =====
+      _common:
+        +schema: mart
+        +materialized: table
+        +as_columnstore: false

@@ -1,0 +1,50 @@
+# Example ~/.dbt/profiles.yml — copy this to your dbt profiles directory.
+# This file is NOT read by dbt from inside the project; it documents the
+# expected shape of your local/CI profile. Never commit real credentials.
+#
+#   mkdir -p ~/.dbt
+#   cp profiles.yml.example ~/.dbt/profiles.yml
+#   # then fill in <SQL_USER> / <SQL_PASSWORD> or switch to `authentication: cli`
+
+datavault:
+  target: dev
+  outputs:
+    dev:
+      type: sqlserver
+      driver: 'ODBC Driver 18 for SQL Server'
+      server: ppmcag-datavault.database.windows.net
+      port: 1433
+      database: datavault-dev-dev
+      schema: stg
+      authentication: cli   # or 'sql' with user/password below
+      encrypt: true
+      trust_cert: false
+
+    test:
+      type: sqlserver
+      driver: 'ODBC Driver 18 for SQL Server'
+      server: ppmcag-datavault.database.windows.net
+      port: 1433
+      database: datavault-dev-test
+      schema: stg
+      authentication: cli
+      encrypt: true
+      trust_cert: false
+
+    prod:
+      type: sqlserver
+      driver: 'ODBC Driver 18 for SQL Server'
+      server: ppmcag-datavault.database.windows.net
+      port: 1433
+      database: datavault-dev
+      schema: stg
+      authentication: sql
+      user: <SQL_USER>
+      password: "<SQL_PASSWORD>"
+      encrypt: true
+      trust_cert: false
+
+# Alternative: Azure CLI authentication (recommended for local dev)
+#   az login
+# then use `authentication: cli` (already the default above for dev/test) instead
+# of `authentication: sql` with a hardcoded user/password.

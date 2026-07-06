@@ -1,126 +1,256 @@
-# datavault-dbt-boilerplate
+# datavault - Data Vault 2.1 dbt Project
 
-A [Copier](https://copier.readthedocs.io/) template for scaffolding new **Data
-Vault 2.1** dbt projects on SQL Server / Azure SQL. Ships with generic hash-key
-and satellite macros, the standard staging → hub/sat/link layering convention,
-a working AdventureWorks reference implementation, and CI workflows for
-`dbt build` + docs publishing.
+> Generated from [datavault-dbt-boilerplate](https://github.com/fellnerd/datavault-dbt-boilerplate) via [Copier](https://copier.readthedocs.io/). Data Vault 2.1 on SQL Server / Azure SQL with dbt Core.
 
-This repository is the template itself — the actual project scaffold lives
-under [`template/`](template/). `copier.yml` at the root defines the questions
-asked when generating a new project.
+## Overview
 
-## Create a new project from this template
+This project implements a virtualized Data Vault 2.1 architecture. Source
+data flows through External Tables into staging views and is then modeled as
+Hubs, Satellites, and Links.
 
-There are two ways to start a new project from this template. **Option A is
-recommended** — it generates the rendered project and lets you push it to a
-new repo in one go. Option B is for when a repo already exists (e.g. you
-clicked GitHub's "Use this template" button) and now needs to be rendered.
+### Architecture
 
-### Option A: Generate locally, then push to a new repo
-
-Install Copier once:
-
-```bash
-pipx install copier
-# or: uv tool install copier
+```
+Source System -> External Table -> Staging View -> Hub/Sat/Link
+                  (stg.ext_*)     (stg.stg_*)    (vault.*)
 ```
 
-Generate a new project:
+### Environments
+
+| Target | Database | Usage |
+|--------|----------|-------|
+| `dev` | datavault-dev-dev | Development |
+| `test` | datavault-dev-test | Testing |
+| `prod` | datavault-dev | Production |
+
+---
+
+## Installation
+
+### Prerequisites
+
+- **Python 3.10+**
+- **ODBC Driver 18 for SQL Server**
+- **Azure CLI** (required for infra deployment, and for CLI authentication)- **Git**
+
+### 1. Clone the repository
 
 ```bash
-copier copy gh:fellnerd/datavault-dbt-boilerplate my-customer-dbt-project
+git clone https://github.com/fellnerd/datavault.git
 ```
 
-Copier will prompt for: project name, dbt profile name, company/author name,
-GitHub org, example warehouse server / database name, schema names, hash
-algorithm, and whether to include the AdventureWorks demo. Answers are
-written to `.copier-answers.yml` in the new project — **do not delete this
-file**, it is required for `copier update` later.
-
-Then push it to a new (empty) GitHub repo:
+### 2. Create a Python virtual environment
 
 ```bash
-cd my-customer-dbt-project
-git init -b main
-git add -A
-git commit -m "Initial project from datavault-dbt-boilerplate"
-git remote add origin git@github.com:<your-org>/<your-repo>.git
-git push -u origin main
+cd datavault
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-### Option B: You already created a repo via "Use this template"
-
-GitHub's green **"Use this template"** button only copies the files
-as-is — it does **not** run Copier and does not ask any questions. If you
-used it, your new repo still contains the raw, unrendered scaffold
-(`copier.yml`, the `template/` folder, `.jinja` files, `{% if %}` in some
-file names) instead of a working dbt project. To actually render it:
+### 3. Install dbt and dependencies
 
 ```bash
-git clone git@github.com:<your-org>/<your-repo>.git
-cd <your-repo>
-
-pipx install copier   # if not already installed
-copier copy gh:fellnerd/datavault-dbt-boilerplate . --overwrite
+pip install --upgrade pip
+pip install dbt-core dbt-sqlserver
 ```
 
-Answer the prompts (for `github_org`, use the org/user your new repo lives
-under). This overwrites the raw scaffold in place with the rendered project
-and writes `.copier-answers.yml`. Then commit and push:
+### 4. Install dbt packages
 
 ```bash
-git add -A
-git commit -m "Render project from datavault-dbt-boilerplate"
-git push
+dbt deps
 ```
 
-## Pull in later template improvements
+---
 
-From inside an already-generated project:
+## Configure the database connection
+
+The dbt connection is configured via `~/.dbt/profiles.yml` (not part of this
+repository!). A ready-to-copy example ships as [`profiles.yml.example`](profiles.yml.example).
 
 ```bash
+mkdir -p ~/.dbt
+cp profiles.yml.example ~/.dbt/profiles.yml
+# fill in <SQL_USER> / <SQL_PASSWORD>, or switch to `authentication: cli`
+```
+
+### Alternative: Azure CLI authentication (recommended)
+
+```bash
+az login
+```
+
+then set `authentication: cli` in the relevant target (already the default
+for `dev`/`test` in `profiles.yml.example`).
+
+### Required information
+
+| Parameter | Description | Example |
+|-----------|--------------|---------|
+| `server` | Azure SQL Server FQDN | `ppmcag-datavault.database.windows.net` |
+| `database` | Target database | `datavault-dev-dev` |
+| `user` | SQL admin user | `sqladmin` |
+| `password` | SQL password | (ask your admin) |
+
+### Test the connection
+
+```bash
+source .venv/bin/activate
+dbt debug
+```
+
+Expected output:
+```
+Connection test: [OK connection ok]
+```
+
+If this is a brand-new database, first create the schemas with
+[`scripts/setup_schemas.sql`](scripts/setup_schemas.sql) (see `scripts/README.md`).
+
+---
+
+## Usage
+
+### Basic commands
+
+```bash
+# Activate environment
+source .venv/bin/activate
+
+# Build all models (development)
+dbt run
+
+# Single model
+dbt run --select hub_customer
+
+# Model with dependencies
+dbt run --select +sat_customer+
+
+# Production
+dbt run --target prod
+
+# Run tests
+dbt test
+
+# Refresh external tables
+dbt run-operation stage_external_sources
+
+# Compile SQL without running
+dbt compile --select model_name
+```
+
+### Full refresh
+
+```bash
+# Rebuild all models (loses satellite history!)
+dbt run --full-refresh
+
+# Recreate external tables
+dbt run-operation stage_external_sources --vars '{"ext_full_refresh": true}'
+```
+
+---
+
+## Project structure
+
+```
+datavault/
+├── dbt_project.yml          # Project configuration
+├── packages.yml              # dbt packages (automate_dv, etc.)
+├── profiles.yml.example      # Example connection profile
+├── models/
+│   ├── staging/               # External Tables & Staging Views
+│   │   ├── sources.yml        # External table definitions
+│   │   └── stg_*.sql          # Staging views with hash calculation
+│   ├── raw_vault/
+│   │   └── _common/
+│   │       ├── hubs/          # Hub tables
+│   │       ├── satellites/    # Satellite tables
+│   │       └── links/         # Link tables
+│   ├── business_vault/
+│   └── mart/
+├── macros/                   # Custom macros
+├── seeds/                    # Reference data (CSV)
+├── scripts/                  # Utility SQL scripts (e.g. setup_schemas.sql, setup_external_source.sql)
+├── infra/                     # Bicep templates + deploy workflow (see infra/README.md)
+├── design/                   # Design templates (hub/link/PIT/bridge)
+└── docs/                     # Documentation
+```
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|--------------|
+| [docs/DEVELOPER.md](docs/DEVELOPER.md) | Detailed developer guide |
+| [docs/CLAUDE.md](docs/CLAUDE.md) | AI assistant context |
+| [docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md) | Troubleshooting & decisions |
+
+---
+
+## Important notes
+
+### Azure SQL Basic Tier limitations
+
+- **No columnstore index** -> always set `as_columnstore: false`
+- **Incremental strategy:** use `append`
+
+### Hash calculation
+
+Uses native SQL Server functions (not automate_dv macros):
+
+```sql
+CONVERT(CHAR(64), HASHBYTES('SHA2_256',
+    ISNULL(CAST(column AS NVARCHAR(MAX)), '')
+), 2)
+```
+
+### Common issues
+
+| Problem | Solution |
+|---------|----------|
+| Schema is created as `dv_stg` instead of `stg` | check the `generate_schema_name` macro |
+| External table error | run `dbt run-operation stage_external_sources` |
+| Cross-database error | use `{{ target.database }}` instead of a hardcoded database name |
+
+---
+## Deploying infrastructure
+
+Azure infrastructure (SQL Server, the `datavault-dev`/`datavault-dev-dev`/`datavault-dev-test`
+databases, storage account, and the RBAC needed for managed-identity-based
+external data sources) is provisioned via Bicep, triggered through the
+**Deploy Azure Infrastructure** GitHub Actions workflow. Prerequisites:
+an existing Azure AD admin group, an existing resource group, and 5 GitHub
+secrets (`AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID`/
+`AZURE_SUBSCRIPTION_ID`/`SQL_ADMIN_PASSWORD`). See [`infra/README.md`](infra/README.md)
+for full details and how to trigger it.
+
+---
+## Updating from the template
+
+This project was scaffolded with [Copier](https://copier.readthedocs.io/).
+To pull in later improvements to the boilerplate (new macros, CI fixes, doc
+updates):
+
+```bash
+pipx install copier   # once
 copier update
 ```
 
-Copier re-applies your original answers (from `.copier-answers.yml`), diffs
-against the current template version, and merges upstream boilerplate changes
-(new macros, CI fixes, doc improvements) into your project — including
-conflict markers for anything you've customized. Commit the result like any
-other merge.
+Copier reapplies your original answers and merges upstream changes, adding
+conflict markers where you've customized files.
 
-To change an answer after the fact (e.g. drop the AdventureWorks demo):
+---
 
-```bash
-copier update --data include_example=false
-```
+## Links
 
-## What's included
+- **GitHub:** [fellnerd/datavault](https://github.com/fellnerd/datavault)
+- **Boilerplate:** [fellnerd/datavault-dbt-boilerplate](https://github.com/fellnerd/datavault-dbt-boilerplate)
+- **dbt Docs:** [docs.getdbt.com](https://docs.getdbt.com)
+- **automate_dv:** [automate-dv.readthedocs.io](https://automate-dv.readthedocs.io)
 
-- `macros/` — 10 generic Data Vault 2.1 macros (hash keys, ghost records,
-  satellite current-flag handling, schema naming, parquet/external-table
-  helpers).
-- `models/raw_vault/_common/{hubs,satellites,links}` — empty framework
-  folders for your cross-source Data Vault objects.
-- `models/raw_vault/adworks/`, `models/staging/adworks_*.sql` — optional
-  AdventureWorks reference implementation (toggle via `include_example`).
-- `design/` — Mermaid/Markdown design templates for hubs, links, PITs,
-  bridges, and staging mappings.
-- `docs/` — developer guide, architecture notes, lessons learned.
-- `.github/workflows/` — generic CI (`dbt build` on PR) and docs-publishing
-  workflows; `.github/workflows-examples/` has non-executing deploy pipeline
-  patterns to adapt per customer.
-- `scripts/setup_schemas.sql` — creates the staging/vault/mart schemas in a
-  fresh target database so `dbt debug && dbt run` works right after setup.
-
-## Template development
-
-Test changes to the template locally before pushing:
-
-```bash
-copier copy . /tmp/smoke-test --defaults
-```
+---
 
 ## License
 
-[MIT](LICENSE)
+ppmc ag - All rights reserved.
