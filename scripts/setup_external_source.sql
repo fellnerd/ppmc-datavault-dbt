@@ -42,12 +42,16 @@ END
 GO
 
 -- 4. External data source — name must match `data_source: StageFileSystem` in sources.yml.
---    Uses abfss:// (current Microsoft-recommended scheme for ADLS Gen2), not the older adls:// alias.
+--    Uses adls:// — this is the scheme Azure SQL DATABASE actually supports for external
+--    data sources against ADLS Gen2. abfss:// is a Synapse Analytics / Databricks / Fabric
+--    scheme; Azure SQL Database rejects it with "unsupported connector location prefix"
+--    (Msg 46548). Note the path order also differs from abfss: container comes after the
+--    host here, not before it with an @.
 IF NOT EXISTS (SELECT 1 FROM sys.external_data_sources WHERE name = 'StageFileSystem')
 BEGIN
     CREATE EXTERNAL DATA SOURCE [StageFileSystem]
     WITH (
-        LOCATION = 'abfss://$(ContainerName)@$(StorageAccountName).dfs.core.windows.net',
+        LOCATION = 'adls://$(StorageAccountName).dfs.core.windows.net/$(ContainerName)',
         CREDENTIAL = [managed_identity]
     );
 END

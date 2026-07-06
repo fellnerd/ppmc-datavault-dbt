@@ -35,6 +35,17 @@ firewall rule, which GitHub-hosted runners (running in Azure) pass through.
 
 ## Prerequisites
 
+0. **Resource providers are registered on the subscription** (one-time per
+   subscription; a fresh subscription fails with `MissingSubscriptionRegistration`
+   otherwise). The service principal cannot do this itself — it is only
+   RG-scoped. Run once as a subscription admin:
+
+   ```bash
+   az provider register --namespace Microsoft.Sql
+   az provider register --namespace Microsoft.Storage
+   # check: az provider show -n Microsoft.Sql --query registrationState
+   ```
+
 1. **An Azure AD group already exists** to use as the SQL Server's AAD admin
    — this template does not create AAD groups. You'll need its display name
    and object ID.
