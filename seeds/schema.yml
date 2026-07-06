@@ -8,7 +8,7 @@ seeds:
     columns:
       - name: role_code
         description: Business Key - Eindeutiger Rollen-Code
-        tests:
+        data_tests:
           - unique
           - not_null
       - name: role_name
