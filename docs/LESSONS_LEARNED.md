@@ -111,7 +111,7 @@ CONVERT(CHAR(64), HASHBYTES('SHA2_256',
 **Symptom:** Sicherheitsrisiko durch Credentials im Git
 
 **Lösung:** 
-- profiles.yml in ~/.dbt/ (außerhalb Repo)
+- profiles.yml im Projekt-Root (gitignored) oder in ~/.dbt/ (außerhalb Repo)
 - .gitignore mit `profiles.yml`
 - Azure CLI Authentication (keine Passwörter)
 

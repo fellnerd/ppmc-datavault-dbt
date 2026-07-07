@@ -500,7 +500,7 @@ dbt run-operation get_parquet_data --args '{"folder_path": "neue_quelle/ordner",
 datavault-dbt/
 ├── dbt_project.yml              # ⚙️ Projektkonfiguration
 ├── packages.yml                 # 📦 Package-Abhängigkeiten
-├── profiles.yml                 # 🔐 In ~/.dbt/ (nicht im Repo!)
+├── profiles.yml                 # 🔐 Projekt-Root, gitignored (nicht im Repo!)
 │
 ├── macros/                      # 🔧 Wiederverwendbare Macros
 │   ├── generate_schema_name.sql

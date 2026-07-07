@@ -64,14 +64,21 @@ dbt deps
 
 ## Configure the database connection
 
-The dbt connection is configured via `~/.dbt/profiles.yml` (not part of this
-repository!). A ready-to-copy example ships as [`profiles.yml.example`](profiles.yml.example).
+The dbt connection is configured via a `profiles.yml`. A ready-to-copy
+example ships as [`profiles.yml.example`](profiles.yml.example).
 
 ```bash
-mkdir -p ~/.dbt
-cp profiles.yml.example ~/.dbt/profiles.yml
+cp profiles.yml.example profiles.yml
 # fill in <SQL_USER> / <SQL_PASSWORD>, or switch to `authentication: cli`
 ```
+
+Put it **in the project root**, not `~/.dbt/`. dbt looks for `profiles.yml`
+in the current working directory before falling back to `~/.dbt/`, so this
+just works with no `--profiles-dir` flag or environment variable needed —
+the same pattern the CI workflows already use (they write it to
+`$GITHUB_WORKSPACE`, i.e. the checked-out project root). `profiles.yml` is
+already in `.gitignore`, so it's never committed; `profiles.yml.example`
+(no real credentials) is the only version tracked in git.
 
 ### Alternative: Azure CLI authentication (recommended)
 

@@ -276,7 +276,7 @@ models:
 ### 7.3 Secrets
 
 - Keine Passwörter in profiles.yml
-- profiles.yml liegt in `~/.dbt/` (außerhalb Git)
+- profiles.yml liegt im Projekt-Root (gitignored) oder in `~/.dbt/`
 - Azure CLI Token wird bei Bedarf geholt
 
 ---
