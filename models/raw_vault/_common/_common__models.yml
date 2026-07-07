@@ -1,11 +1,10 @@
 version: 2
 
 models:
-  - name: stg_role
+  - name: hub_role
     description: >
-      Staging view for company roles, sourced from the ref_role seed.
-      Starter example proving the staging -> hub -> satellite pattern
-      (hash key/hashdiff calculation, automate_dv macros) end-to-end.
+      Hub for company roles (Client/Contractor/Supplier). Starter example
+      proving the Data Vault pipeline end-to-end; sourced from stg_role.
     columns:
       - name: hk_role
         description: Hash Key (Primary Key)
@@ -13,14 +12,30 @@ models:
         data_tests:
           - not_null
           - unique
-      - name: hd_role
-        description: Hashdiff for change detection
-        data_type: char(64)
-        data_tests:
-          - not_null
       - name: role_code
         description: Business Key
         data_type: nvarchar(4000)
+        data_tests:
+          - not_null
+      - name: dss_load_date
+        description: Load timestamp
+        data_type: datetime2(7)
+        data_tests:
+          - not_null
+      - name: dss_record_source
+        description: Data source
+        data_type: varchar(100)
+        data_tests:
+          - not_null
+
+  - name: sat_role
+    description: >
+      Satellite holding descriptive attributes for hub_role, with
+      hashdiff-based change detection.
+    columns:
+      - name: hk_role
+        description: Hash Key (references hub_role)
+        data_type: char(64)
         data_tests:
           - not_null
       - name: role_name
