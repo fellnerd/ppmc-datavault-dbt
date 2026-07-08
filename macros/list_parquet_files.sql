@@ -3,7 +3,7 @@
     Listet alle Parquet-Dateien in einem ADLS-Verzeichnis auf.
     
     Verwendung:
-        dbt run-operation list_parquet_files --args '{"folder_path": "adventureworks/sqlserver"}'
+        dbt run-operation list_parquet_files --args '{"folder_path": "sauter-test"}'
     
     Voraussetzung:
         - External Data Source "StageFileSystem" muss existieren

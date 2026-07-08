@@ -1,4 +1,4 @@
-{% macro get_parquet_schema(folder_path, file_name) %}
+{% macro get_parquet_schema(folder_path, file_name, data_source='StageFileSystem', file_format='ParquetFormat') %}
 {#
     Liest das Schema einer Parquet-Datei und gibt es als YAML für sources.yml aus.
     
@@ -42,7 +42,7 @@
         SELECT TOP 0 * 
         FROM OPENROWSET(
             BULK ''{{ file_path }}'',
-            DATA_SOURCE = ''StageFileSystem'',
+            DATA_SOURCE = ''{{ data_source }}'',
             FORMAT = ''PARQUET''
         ) AS r
     '
@@ -56,8 +56,8 @@
     {{ log('        description: "Auto-generated from ' ~ file_name ~ '"', info=True) }}
     {{ log("        external:", info=True) }}
     {{ log('          location: "' ~ file_path ~ '"', info=True) }}
-    {{ log("          file_format: ParquetFormat", info=True) }}
-    {{ log("          data_source: StageFileSystem", info=True) }}
+    {{ log("          file_format: " ~ file_format, info=True) }}
+    {{ log("          data_source: " ~ data_source, info=True) }}
     {{ log("        columns:", info=True) }}
     
     {% for row in results %}
