@@ -19,6 +19,17 @@
       "Bash(.venv/bin/python scripts/validate_er_sources.py:*)"
     ]
   },
+  "extraKnownMarketplaces": {
+    "datavault-dbt": {
+      "source": {
+        "source": "github",
+        "repo": "fellnerd/datavault-dbt-boilerplate"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "dv-toolkit@datavault-dbt": true
+  },
   "hooks": {
     "PreToolUse": [
       {
