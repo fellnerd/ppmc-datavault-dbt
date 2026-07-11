@@ -15,8 +15,7 @@
       "Bash(.venv/bin/dbt ls:*)",
       "Bash(.venv/bin/dbt debug:*)",
       "Bash(.venv/bin/dbt deps:*)",
-      "Bash(.venv/bin/dbt test:*)",
-      "Bash(.venv/bin/python scripts/validate_er_sources.py:*)"
+      "Bash(.venv/bin/dbt test:*)"
     ]
   },
   "extraKnownMarketplaces": {
