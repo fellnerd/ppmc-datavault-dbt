@@ -241,7 +241,7 @@ flowchart LR
 | Objekt | PK | FK | Beschreibung |
 |--------|----|----|--------------|
 | `hub_contractor` | `hk_contractor` | - | Parent Hub |
-| `link_contact_contractor` | `hk_link = HASH(company_contractor ^^ name ^^ email1)` | `hk_contractor` | Pure DC Link (nur 1 FK) |
+| `link_contact_contractor` | `hk_link = HASH(company_contractor, name, email1)` | `hk_contractor` | Pure DC Link (nur 1 FK) |
 | `sat_contact_contractor_dc` | - | `hk_link_contact_contractor` | DCK (name, email1) im Payload |
 
 ```
@@ -318,22 +318,18 @@ SELECT * FROM {{ ref('psa_<concept>_<entity>') }}
 
 ## Hash Key Berechnung
 
-```sql
--- hub_company: Composite Key (object_id nicht global unique)
--- Separator '^^' gemäß DV 2.1 Best Practice
-CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-    CONCAT(
-        ISNULL(CAST(object_id AS NVARCHAR(MAX)), ''),
-        '^^',
-        ISNULL(source_table, '')
-    )
-), 2) AS hk_company
+Hashing erfolgt zentral über **automate_dv** mit den Projekt-Overrides in `macros/hash_override.sql` (`sqlserver__cast_binary` → hex-encoded `CHAR(64)`, `sqlserver__type_string` → `NVARCHAR` für Unicode). Separator und NULL-Behandlung kommen aus `dbt_project.yml` (`concat_string: '||'`, `null_placeholder_string: '-1'`, `hash_content_casing: DISABLED`).
 
--- hub_country: Simple Key
-CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-    ISNULL(CAST(object_id AS NVARCHAR(MAX)), '')
-), 2) AS hk_country
+```yaml
+# In der Staging View (automate_dv.stage):
+hashed_columns:
+  hk_company:                 # Composite Key (object_id nicht global unique)
+    - "object_id"
+    - "source_table"
+  hk_country: "object_id"     # Simple Key
 ```
+
+Erzeugtes SQL-Muster: `CONVERT(CHAR(64), HASHBYTES('SHA2_256', …), 2)` — hex-encoded, lesbar, Index-freundlich. Der Berechnungsweg darf innerhalb einer Entity nie gemischt werden (manuell berechnete Hashes sind nicht kompatibel).
 
 ## DV 2.1 Compliance Features
 

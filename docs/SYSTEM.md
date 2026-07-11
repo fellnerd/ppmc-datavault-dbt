@@ -413,6 +413,8 @@ journalctl -u actions.runner.<your-org>-datavault-dbt.dbt-runner-vm -f
 
 | Datum | Version | Änderung |
 |-------|---------|----------|
+| 2026-07-12 | 2.2.0 | **Hashing vereinheitlicht:** automate_dv-Hashing via hash_override.sql (cast_binary/type_string), `concat_string: '||'` — ersetzt manuelles '^^'-Hashing für Neuentwicklungen |
+| 2026-07-12 | 2.2.0 | Doku modernisiert: automate_dv-Templates, kein Full Refresh bei Schemaänderungen (on_schema_change) |
 | 2025-12-28 | 2.1.0 | **CI/CD Pipeline:** GitHub Actions mit Self-hosted Runner |
 | 2025-12-28 | 2.1.0 | 4 Workflows (CI, Deploy-Dev, Deploy-Prod, Docs) |
 | 2025-12-28 | 2.1.0 | GitHub Pages für dbt Docs |
@@ -463,8 +465,8 @@ dbt run-operation stage_external_sources
 # 6. Reference Data laden
 dbt seed
 
-# 7. Alle Models bauen
-dbt run --full-refresh
+# 7. Alle Models bauen (Erstlauf — DB ist leer, kein Full Refresh nötig)
+dbt run
 
 # 8. Ghost Records einfügen (optional)
 dbt run-operation insert_ghost_records

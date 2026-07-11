@@ -1,32 +1,34 @@
--- Test integration: proves the staging -> hub -> satellite pattern works
--- end-to-end against the deployed infra (hash calc, automate_dv macros,
--- vault schema). Sourced from the ref_role seed since no external source
--- is wired up yet.
+/*
+ * Staging Model: stg_role
+ *
+ * Test integration: proves the staging -> hub -> satellite pattern works
+ * end-to-end against the deployed infra (hash calc via automate_dv,
+ * vault schema). Sourced from the ref_role seed since no external source
+ * is wired up yet.
+ *
+ * Business Key: role_code | Hash Key: hk_role | Hash Diff: hd_role
+ * Hashing zentral über automate_dv (hash_override.sql, concat_string '||').
+ */
 
-WITH source_data AS (
-    SELECT
-        role_code,
-        role_name,
-        role_description
-    FROM {{ ref('ref_role') }}
-),
+{%- set yaml_metadata -%}
+source_model: "ref_role"
 
-hashed AS (
-    SELECT
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256',
-            ISNULL(CAST(role_code AS NVARCHAR(MAX)), '')
-        ), 2) AS hk_role,
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256',
-            ISNULL(CAST(role_code AS NVARCHAR(MAX)), '') + '^^' +
-            ISNULL(CAST(role_name AS NVARCHAR(MAX)), '') + '^^' +
-            ISNULL(CAST(role_description AS NVARCHAR(MAX)), '')
-        ), 2) AS hd_role,
-        role_code,
-        role_name,
-        role_description,
-        CAST(GETDATE() AS DATETIME2) AS dss_load_date,
-        CAST('seed/ref_role' AS VARCHAR(100)) AS dss_record_source
-    FROM source_data
-)
+derived_columns:
+  dss_record_source: "!seed/ref_role"
+  dss_load_date: "CAST(GETDATE() AS DATETIME2)"
 
-SELECT * FROM hashed
+hashed_columns:
+  hk_role: "role_code"
+  hd_role:
+    is_hashdiff: true
+    columns:
+      - "role_name"
+      - "role_description"
+{%- endset -%}
+
+{% set metadata = fromyaml(yaml_metadata) %}
+
+{{ automate_dv.stage(include_source_columns=true,
+                     source_model=metadata['source_model'],
+                     derived_columns=metadata['derived_columns'],
+                     hashed_columns=metadata['hashed_columns']) }}

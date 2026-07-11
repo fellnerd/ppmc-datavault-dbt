@@ -79,28 +79,22 @@ dbt run-operation stage_external_sources    # External Tables anlegen/aktualisie
 ## Working rules
 
 - **Always ask** before creating DV objects (offer numbered options).
-- **Confirm destructive actions:** `dbt run --full-refresh` (loses history!), deleting models, ALTER/DROP. Ein PreToolUse-Hook (`.claude/hooks/dv_guard.py`) erzwingt die Bestätigung zusätzlich.
+- **Confirm destructive actions:** `dbt run --full-refresh` (loses history!), deleting models, ALTER/DROP. Der PreToolUse-Hook des dv-toolkit-Plugins erzwingt die Bestätigung zusätzlich.
 - **Never** `--full-refresh` on historized satellites.
 - **DB tools read-only** — writes only via dbt commands.
 - Details: [docs/CLAUDE.md](docs/CLAUDE.md), [docs/DEVELOPER.md](docs/DEVELOPER.md)
 
 ## Claude-Code-Komponenten (dbt/DV-2.1, generisch)
 
+Die generischen DV-Komponenten kommen aus dem Plugin **`dv-toolkit@datavault-dbt`** (Marketplace = Boilerplate-Repo `fellnerd/datavault-dbt-boilerplate`, in `.claude/settings.json` registriert):
+
 | Komponente | Zweck |
 |-----------|-------|
-| Skill `dv-patterns` | DV-2.1-Entscheidungslogik, Naming, automate_dv-Templates (Hub/Sat/Link/TL/MA/DC/Ref) |
-| Skill `dv-staging` | stage()-Staging-Workflow, Typ-Fallen, Reserved Keywords |
-| Skill `dv-marts` | Star-Schema-Marts: Surrogate Keys, Pflichtspalten, NULL-Fallbacks |
-| Skill `dv-design-sync` | Mermaid-Design-Doku synchron zu den Modellen halten |
-| Skill `validate-er` | Sauter-ER-Modell gegen sources.yml prüfen (projektspezifisch) |
-| Agent `vault-architect` | Staging-View → Vault-Objekte entwerfen/erstellen |
-| Agent `staging-engineer` | Quelle anbinden → sources.yml + Staging-View + Doku |
-| Agent `mart-architect` | Vault → Dimensionen/Fakten |
-| Agent `db-monitor` | Read-only-Statusabgleich Code ↔ Datenbank |
-| Hook `dv_lint.py` (PostToolUse) | Deterministischer DV-Lint nach jedem Edit/Write auf models/ und design/ |
-| Hook `dv_guard.py` (PreToolUse) | `--full-refresh` erfordert immer User-Bestätigung |
+| Skills `dv-patterns`, `dv-staging`, `dv-marts`, `dv-design-sync` | DV-2.1-Patterns/Templates, stage()-Workflow, Star-Schema-Marts, Mermaid-Design-Sync |
+| Agents `vault-architect`, `staging-engineer`, `mart-architect`, `db-monitor` | Staging→Vault-Entwurf, Quellanbindung, Marts, Read-only-DB-Statusabgleich |
+| Hooks `dv_lint.py` (PostToolUse), `dv_guard.py` (PreToolUse) | Deterministischer DV-Lint auf models/+design/; `--full-refresh` erfordert User-Bestätigung |
 
-Daneben existieren die `datavault:*` Plugin-Skills (`create-hub`, `db-query`, `dbt-run`, …) — bei Überschneidung die Projekt-Komponenten bevorzugen, sie tragen die Projektkonventionen.
+Plugin-Updates: `/plugin marketplace update datavault-dbt`. Projektspezifisch bleibt nur Skill `validate-er` (Sauter-ER-Modell gegen sources.yml). Daneben existieren die `datavault:*` Plugin-Skills (`create-hub`, `db-query`, …) — bei Überschneidung die dv-toolkit-Komponenten bevorzugen, sie tragen die Projektkonventionen.
 
 ## Infrastructure
 

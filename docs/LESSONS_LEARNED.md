@@ -54,9 +54,11 @@ PoC für eine virtualisierte Data Vault 2.1 Architektur als wiederverwendbares S
 - `object_id` ist NICHT global unique → Composite Key `object_id + source_table`
 
 ### 6. Hash-Separator '^^' statt '||'
-**Entscheidung:** `'^^'` als Trennzeichen für Composite Hash Keys
+> ⚠️ **Revidiert (2026-07-12):** Mit der Umstellung auf durchgängiges automate_dv-Hashing (`hash_override.sql` mit `cast_binary`/`type_string`-Overrides) gilt der automate_dv-Standard **`concat_string: '||'`** samt NULL-Placeholder-Logik — bewährt im federführenden EWB-Projekt. Manuelle '^^'-Hashes in Bestands-Beispielen bleiben in sich konsistent; Berechnungswege innerhalb einer Entity nie mischen.
 
-**Begründung:**
+**Ursprüngliche Entscheidung:** `'^^'` als Trennzeichen für Composite Hash Keys
+
+**Begründung (damals):**
 - DV 2.1 Best Practice (selten in natürlichen Daten)
 - `'||'` kann in SQL-Strings vorkommen (Oracle Concat-Operator)
 - Konsistenz mit Scalefree Standards
@@ -186,7 +188,7 @@ Statt: Timestamp-basierter Vergleich
 |---------|--------|----------------|
 | Hash Keys (SHA2_256) | ✅ | `HASHBYTES()` mit CHAR(64) |
 | Hash Diff für Change Detection | ✅ | `hd_*` Spalten in Satellites |
-| Hash Separator '^^' | ✅ | Composite Keys in `<concept>_company` |
+| Hash Separator | ✅ | automate_dv `concat_string: '||'` (revidiert, s. Entscheidung 6); Beispiel-Altbestand '^^' |
 | dss_load_date Metadata | ✅ | Alle Vault-Objekte |
 | dss_record_source | ✅ | Quellsystem-Tracking |
 | dss_is_current Flag | ✅ | Satellites mit Post-Hook |
@@ -314,4 +316,4 @@ journalctl -u actions.runner.<your-org>-datavault-dbt.dbt-runner-vm -f
 - ✅ dss_is_current + dss_end_date in allen Satellites
 - ✅ PIT-Tabelle für sat_company
 - ✅ Effectivity Satellite für link_company_country
-- ✅ Hash-Separator auf '^^' standardisiert
+- ✅ Hash-Berechnung auf automate_dv standardisiert (concat_string '||'; revidiert, s. Entscheidung 6)

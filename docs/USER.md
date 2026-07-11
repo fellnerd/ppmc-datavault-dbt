@@ -409,10 +409,10 @@ dbt run --select adworks_neue_entity hub_neue_entity sat_neue_entity --target <t
 
 ### 5.3 Full Refresh
 
+⚠️ **Vorsicht:** Full Refresh baut inkrementelle Tabellen komplett neu (DROP + CREATE) — bei historisierten Vault-Objekten (Hubs, Satellites, Links) geht damit die **gesamte Historie verloren**. Nur bewusst und nach Rücksprache einsetzen (z. B. Static Tables, Typänderungen).
+
 ```bash
-# Inkrementelle Models neu bauen (DROP + CREATE)
-dbt run --full-refresh
-dbt run --full-refresh --select hub_company_client
+dbt run --full-refresh --select <nicht_historisiertes_model>
 ```
 
 ---
@@ -619,14 +619,14 @@ WHERE c.dss_is_current = 'Y'
 
 **F: Warum werden meine Änderungen nicht übernommen?**
 - Prüfen Sie mit `dbt run --select <model>` ob das Model läuft
-- Bei inkrementellen Models: `dbt run --full-refresh --select <model>`
+- Bei inkrementellen Models liefert ein normaler Run nur Deltas — das ist korrekt. Ein `--full-refresh` würde die Historie löschen; nur bei nicht-historisierten Objekten einsetzen.
 - Logfiles prüfen: `logs/dbt.log`
 
 **F: Wie füge ich ein neues Feld hinzu?**
 1. In `sources.yml` die Spalte zur External Table hinzufügen
-2. In `stg_*.sql` die Spalte übernehmen
+2. In der Staging View übernehmen (bei automate_dv.stage() automatisch; falls historisiert: in die Hashdiff-Liste)
 3. In `sat_*.sql` die Spalte zum Payload hinzufügen
-4. `dbt run --full-refresh --select sat_*`
+4. `dbt run --select <staging> <satellite>` — kein Full Refresh nötig (`on_schema_change: append_new_columns`)
 
 **F: Was bedeutet "Hash Diff has changed"?**
 Das bedeutet, dass sich mindestens ein Attribut geändert hat. Der Hash Diff ist ein "Fingerabdruck" aller Attribute - ändert sich einer, ändert sich der Fingerabdruck.

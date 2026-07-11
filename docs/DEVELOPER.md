@@ -1,13 +1,12 @@
 # Data Vault 2.1 - Developer Guide
 
 > **Projekt:** Virtual Data Vault 2.1 auf Azure  
-> **Version:** 2.0.0  
-> **Stand:** 2025-12-27  
+> **Version:** 2.1.0  
+> **Stand:** 2026-07-12  
 > **Zielgruppe:** Entwickler, Data Engineers
 
 ---
 
-TEST RUN INDEX: 2
 
 ## 📑 Inhaltsverzeichnis
 
@@ -160,7 +159,7 @@ dss_end_date        -- Gültigkeitsende (NULL = aktuell)
 ```sql
 -- Alle Hashes werden im Staging berechnet (automate_dv Best Practice)
 hk_contractor                -- FK Hash zum Parent Hub
-hk_link_contact_contractor   -- Link Hash = HASH(company_contractor ^^ name ^^ email1)
+hk_link_contact_contractor   -- Link Hash = HASH(company_contractor, name, email1)
 hd_contact_contractor_dc     -- Hashdiff für Änderungserkennung
 ```
 
@@ -219,9 +218,9 @@ dss_record_source   -- Quelle
 
 | Typ | FKs | Hash-Berechnung | Beispiel |
 |-----|-----|-----------------|----------|
-| **Standard Link** | 2+ Hub-FKs | `HASH(FK1 ^^ FK2)` | `link_company_country` |
-| **DC Link (Pure)** | 1 Hub-FK | `HASH(FK ^^ DCK1 ^^ DCK2)` | `link_contact_contractor` |
-| **DC Link (Hybrid)** | 2 Hub-FKs + DC | `HASH(FK1 ^^ FK2 ^^ DCK)` | Contact mit eigenem Hub + Parent |
+| **Standard Link** | 2+ Hub-FKs | `HASH(FK1, FK2)` | `link_company_country` |
+| **DC Link (Pure)** | 1 Hub-FK | `HASH(FK, DCK1, DCK2)` | `link_contact_contractor` |
+| **DC Link (Hybrid)** | 2 Hub-FKs + DC | `HASH(FK1, FK2, DCK)` | Contact mit eigenem Hub + Parent |
 
 ---
 
@@ -340,7 +339,7 @@ dbt debug
 dbt run                                              # Alle Models
 dbt run --select raw_vault.<concept>.hub_company     # Einzelnes Model (empfohlen)
 dbt run --select +raw_vault.<concept>.sat_company+   # Model mit Abhängigkeiten
-dbt run --full-refresh                               # Alles neu bauen
+dbt run --full-refresh                               # ⚠️ Nur bewusst einsetzen: vernichtet die Historie inkrementeller Vault-Objekte!
 
 # External Tables erstellen / aktualisieren
 # Namenskonvention: ext_<concept>_<entity> (z.B. ext_adworks_project, ext_<concept>_company)
@@ -586,25 +585,20 @@ Ein bestehendes Attribut soll zum Satellite hinzugefügt werden (z.B. `tax_numbe
 
 📄 **Datei:** [models/staging/<concept>_company.sql](../models/staging/<concept>_company.sql)
 
-```sql
--- 1. Füge Spalte zur SELECT-Liste hinzu
-client_source AS (
-    SELECT 
-        object_id,
-        -- ... bestehende Spalten ...
-        tax_number,              -- ← NEU
-        -- ...
-    FROM {{ source('staging', 'ext_<concept>_company') }}
-),
+**Variante automate_dv.stage()** (Standard): Mit `include_source_columns=true` fließt die neue Spalte automatisch in die View — kein Edit nötig. Nur wenn Änderungen der Spalte **historisiert** werden sollen, die Hashdiff-Liste erweitern:
 
--- 2. Falls im Hash Diff: Füge zur hashdiff_columns Liste hinzu
-{%- set hashdiff_columns = [
-    'name',
-    'street',
-    -- ... bestehende ...
-    'tax_number'                 -- ← NEU (falls Änderungen getrackt werden sollen)
-] -%}
+```yaml
+hashed_columns:
+  hd_<entity>:
+    is_hashdiff: true
+    columns:
+      - "name"
+      - "street"
+      # ... bestehende ...
+      - "tax_number"        # ← NEU (nur falls Änderungen getrackt werden sollen)
 ```
+
+**Variante manuelles Hashing** (ältere Views): Spalte in die SELECT-Liste aufnehmen und — falls getrackt — in die `hashdiff_columns`-Liste ergänzen.
 
 #### Schritt 3: Satellite erweitern
 
@@ -631,16 +625,18 @@ WITH source_data AS (
 # External Table aktualisieren
 dbt run-operation stage_external_sources
 
-# Satellite neu bauen (full-refresh wegen Schemaänderung!)
-dbt run --full-refresh --select <concept>_company sat_company
+# Staging + Satellite normal bauen — KEIN Full Refresh nötig:
+# on_schema_change: append_new_columns ergänzt die neue Spalte,
+# bestehende Zeilen haben dort NULL, die Historie bleibt erhalten.
+dbt run --select <concept>_company raw_vault.<concept>.sat_company
 
 # Tests ausführen
-dbt test --select sat_company
+dbt test --select raw_vault.<concept>.sat_company
 ```
 
 ### ⚠️ Wichtig
-- Bei **Schema-Änderungen** immer `--full-refresh` verwenden
-- Hash Diff nur erweitern wenn Änderungen getrackt werden sollen
+- **Kein `--full-refresh` auf historisierten Satellites** — das vernichtet die Historie. Neue Spalten kommen über `on_schema_change: append_new_columns` an.
+- Hash Diff nur erweitern, wenn Änderungen getrackt werden sollen. Eine Hashdiff-Erweiterung erzeugt beim nächsten Load je Schlüssel genau ein neues Delta (einmaliger „Knick", dokumentieren).
 - Nach Änderung: Tests ausführen!
 
 ---
@@ -712,71 +708,38 @@ sources:
 ```sql
 /*
  * Staging Model: <concept>_product
- * 
- * Bereitet Product-Daten für das Data Vault vor.
- * Hash Key Separator: '^^' (DV 2.1 Standard)
+ *
+ * Source: ext_<concept>_product | Business Key: object_id
+ * Hash Key: hk_product | Hash Diff: hd_product
+ * Uses automate_dv.stage() — Hashing zentral über hash_override.sql (concat_string '||').
  */
 
-{%- set hashdiff_columns = [
-    'name',
-    'description',
-    'price',
-    'category_id'
-] -%}
+{%- set yaml_metadata -%}
+source_model:
+  staging: "ext_<concept>_product"
 
-WITH source AS (
-    SELECT * FROM {{ source('staging', 'ext_<concept>_product') }}
-),
+derived_columns:
+  dss_record_source: "!<concept>"
+  dss_load_date: "COALESCE(TRY_CAST(dss_load_date AS DATETIME2), GETDATE())"
 
-staged AS (
-    SELECT
-        -- ===========================================
-        -- HASH KEYS
-        -- ===========================================
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            ISNULL(CAST(object_id AS NVARCHAR(MAX)), '')
-        ), 2) AS hk_product,
-        
-        -- FK zu anderen Hubs (falls vorhanden)
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            ISNULL(CAST(category_id AS NVARCHAR(MAX)), '')
-        ), 2) AS hk_category,
-        
-        -- ===========================================
-        -- HASH DIFF (Change Detection)
-        -- ===========================================
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            CONCAT(
-                {%- for col in hashdiff_columns %}
-                ISNULL(CAST({{ col }} AS NVARCHAR(MAX)), ''){{ ',' if not loop.last else '' }}
-                {%- endfor %}
-            )
-        ), 2) AS hd_product,
-        
-        -- ===========================================
-        -- BUSINESS KEY
-        -- ===========================================
-        object_id,
-        
-        -- ===========================================
-        -- PAYLOAD
-        -- ===========================================
-        name,
-        description,
-        price,
-        category_id,
-        
-        -- ===========================================
-        -- METADATA
-        -- ===========================================
-        COALESCE(dss_record_source, '<concept>') AS dss_record_source,
-        COALESCE(TRY_CAST(dss_load_date AS DATETIME2), GETDATE()) AS dss_load_date,
-        dss_run_id
-        
-    FROM source
-)
+hashed_columns:
+  hk_product: "object_id"
+  hk_category: "category_id"          # FK-Hash zu anderem Hub (falls vorhanden)
+  hd_product:
+    is_hashdiff: true
+    columns:
+      - "name"
+      - "description"
+      - "price"
+      - "category_id"
+{%- endset -%}
 
-SELECT * FROM staged
+{% set metadata = fromyaml(yaml_metadata) %}
+
+{{ automate_dv.stage(include_source_columns=true,
+                     source_model=metadata['source_model'],
+                     derived_columns=metadata['derived_columns'],
+                     hashed_columns=metadata['hashed_columns']) }}
 ```
 
 ### Schritt 3: Hub erstellen
@@ -785,52 +748,31 @@ SELECT * FROM staged
 
 ```sql
 /*
- * Hub: hub_product
- * Schema: vault
- * 
- * Speichert eindeutige Product Business Keys.
- * Insert-Only: Neue Products werden hinzugefügt, nie gelöscht.
+ * Hub: hub_product | Schema: vault
+ * Speichert eindeutige Product Business Keys. Insert-Only.
  */
 
 {{ config(
-    materialized='incremental',
-    unique_key='hk_product',
-    as_columnstore=false
+    as_columnstore=false,
+    post_hook=["{{ create_hash_index('hk_product') }}"]
 ) }}
 
-WITH source_data AS (
-    SELECT DISTINCT
-        hk_product,
-        object_id,
-        dss_load_date,
-        dss_record_source
-    FROM {{ ref('<concept>_product') }}
-    WHERE hk_product IS NOT NULL
-),
+{%- set yaml_metadata -%}
+source_model: "<concept>_product"
+src_pk: "hk_product"
+src_nk: "object_id"
+src_ldts: "dss_load_date"
+src_source: "dss_record_source"
+{%- endset -%}
 
-{% if is_incremental() %}
-existing_hubs AS {
-    SELECT hk_product FROM {{ this }}
-},
-{% endif %}
+{% set metadata_dict = fromyaml(yaml_metadata) %}
 
-new_records AS (
-    SELECT
-        src.hk_product,
-        src.object_id,
-        src.dss_load_date,
-        src.dss_record_source
-    FROM source_data src
-    {% if is_incremental() %}
-    WHERE NOT EXISTS (
-        SELECT 1 FROM existing_hubs eh
-        WHERE eh.hk_product = src.hk_product
-    )
-    {% endif %}
-)
-
-SELECT * FROM new_records
+{{ automate_dv.hub(src_pk=metadata_dict["src_pk"], src_nk=metadata_dict["src_nk"],
+                   src_ldts=metadata_dict["src_ldts"], src_source=metadata_dict["src_source"],
+                   source_model=metadata_dict["source_model"]) }}
 ```
+
+Materialisierung (`incremental`, `append`, `on_schema_change`) kommt aus `dbt_project.yml` (Folder-Config).
 
 ### Schritt 4: Satellite erstellen
 
@@ -838,73 +780,41 @@ SELECT * FROM new_records
 
 ```sql
 /*
- * Satellite: sat_product
- * Schema: vault
- * 
- * Speichert Product-Attribute mit vollständiger Historie.
- * dss_is_current: 'Y' für aktuellen Eintrag
- * dss_end_date: Ende der Gültigkeit
+ * Satellite: sat_product | Schema: vault
+ * Attribute mit vollständiger Historie; Current Flag via post_hook.
  */
 
 {{ config(
-    materialized='incremental',
-    unique_key='hk_product',
     as_columnstore=false,
     post_hook=[
+        "{{ create_hash_index('hk_product') }}",
         "{{ update_satellite_current_flag(this, 'hk_product') }}"
     ]
 ) }}
 
-WITH source_data AS (
-    SELECT 
-        hk_product,
-        hd_product,
-        dss_load_date,
-        dss_record_source,
-        -- Payload
-        name,
-        description,
-        price,
-        category_id
-    FROM {{ ref('<concept>_product') }}
-    WHERE hk_product IS NOT NULL
-),
+{%- set yaml_metadata -%}
+source_model: "<concept>_product"
+src_pk: "hk_product"
+src_hashdiff:
+  source_column: "hd_product"
+  alias: "hashdiff"
+src_payload:
+  - "name"
+  - "description"
+  - "price"
+  - "category_id"
+src_ldts: "dss_load_date"
+src_source: "dss_record_source"
+{%- endset -%}
 
-{% if is_incremental() %}
-existing_sats AS (
-    SELECT 
-        hk_product,
-        hd_product
-    FROM {{ this }}
-),
-{% endif %}
+{% set metadata_dict = fromyaml(yaml_metadata) %}
 
-new_records AS (
-    SELECT
-        src.hk_product,
-        src.hd_product,
-        src.dss_load_date,
-        src.dss_record_source,
-        src.name,
-        src.description,
-        src.price,
-        src.category_id
-    FROM source_data src
-    {% if is_incremental() %}
-    WHERE NOT EXISTS (
-        SELECT 1 FROM existing_sats es
-        WHERE es.hk_product = src.hk_product
-          AND es.hd_product = src.hd_product
-    )
-    {% endif %}
-)
-
-SELECT 
-    *,
-    'Y' AS dss_is_current,
-    CAST(NULL AS DATETIME2) AS dss_end_date
-FROM new_records
+{{ automate_dv.sat(src_pk=metadata_dict["src_pk"], src_hashdiff=metadata_dict["src_hashdiff"],
+                   src_payload=metadata_dict["src_payload"], src_ldts=metadata_dict["src_ldts"],
+                   src_source=metadata_dict["src_source"], source_model=metadata_dict["source_model"]) }}
 ```
+
+**Wichtig:** `src_hashdiff` braucht `alias: "hashdiff"`; der post_hook `update_satellite_current_flag(this, 'hk_<entity>')` setzt `dss_is_current`/`dss_end_date` (legt die Spalten bei Bedarf selbst an).
 
 ### Schritt 5: Schema YAML erstellen (WICHTIG!)
 
@@ -1056,48 +966,30 @@ dbt test --select raw_vault.<concept>.hub_product raw_vault.<concept>.sat_produc
 
 📄 **Vorlage:** [models/raw_vault/hubs/hub_company.sql](../models/raw_vault/hubs/hub_company.sql)
 
-**Minimales Template:**
+**Minimales Template (automate_dv):**
 
 ```sql
 {{ config(
-    materialized='incremental',
-    unique_key='hk_<entity>',
-    as_columnstore=false
+    as_columnstore=false,
+    post_hook=["{{ create_hash_index('hk_<entity>') }}"]
 ) }}
 
-WITH source_data AS (
-    SELECT DISTINCT
-        hk_<entity>,
-        <business_key_columns>,
-        dss_load_date,
-        dss_record_source
-    FROM {{ ref('<concept>_<entity>') }}
-    WHERE hk_<entity> IS NOT NULL
-),
+{%- set yaml_metadata -%}
+source_model: "<concept>_<entity>"
+src_pk: "hk_<entity>"
+src_nk: "<business_key>"
+src_ldts: "dss_load_date"
+src_source: "dss_record_source"
+{%- endset -%}
 
-{% if is_incremental() %}
-existing_hubs AS (
-    SELECT hk_<entity> FROM {{ this }}
-),
-{% endif %}
+{% set metadata_dict = fromyaml(yaml_metadata) %}
 
-new_records AS (
-    SELECT *
-    FROM source_data src
-    {% if is_incremental() %}
-    WHERE NOT EXISTS (
-        SELECT 1 FROM existing_hubs eh
-        WHERE eh.hk_<entity> = src.hk_<entity>
-    )
-    {% endif %}
-)
-
-SELECT * FROM new_records
+{{ automate_dv.hub(src_pk=metadata_dict["src_pk"], src_nk=metadata_dict["src_nk"],
+                   src_ldts=metadata_dict["src_ldts"], src_source=metadata_dict["src_source"],
+                   source_model=metadata_dict["source_model"]) }}
 ```
 
-**Ersetzen:**
-- `<entity>` → Name der Entity (z.B. `product`)
-- `<business_key_columns>` → Spalten des Business Keys
+**Ersetzen:** `<entity>` (z.B. `product`), `<business_key>`, `<concept>`. Multi-Source: `source_model` als Liste.
 
 ---
 
@@ -1105,53 +997,35 @@ SELECT * FROM new_records
 
 📄 **Vorlage:** [models/raw_vault/satellites/sat_company.sql](../models/raw_vault/satellites/sat_company.sql)
 
-**Minimales Template:**
+**Minimales Template (automate_dv):**
 
 ```sql
 {{ config(
-    materialized='incremental',
-    unique_key='hk_<entity>',
     as_columnstore=false,
     post_hook=[
+        "{{ create_hash_index('hk_<entity>') }}",
         "{{ update_satellite_current_flag(this, 'hk_<entity>') }}"
     ]
 ) }}
 
-WITH source_data AS (
-    SELECT 
-        hk_<entity>,
-        hd_<entity>,
-        dss_load_date,
-        dss_record_source,
-        -- Payload Spalten hier
-        <payload_columns>
-    FROM {{ ref('<concept>_<entity>') }}
-    WHERE hk_<entity> IS NOT NULL
-),
+{%- set yaml_metadata -%}
+source_model: "<concept>_<entity>"
+src_pk: "hk_<entity>"
+src_hashdiff:
+  source_column: "hd_<entity>"
+  alias: "hashdiff"
+src_payload:
+  - "<payload_spalte_1>"
+  - "<payload_spalte_n>"
+src_ldts: "dss_load_date"
+src_source: "dss_record_source"
+{%- endset -%}
 
-{% if is_incremental() %}
-existing_sats AS (
-    SELECT hk_<entity>, hd_<entity> FROM {{ this }}
-),
-{% endif %}
+{% set metadata_dict = fromyaml(yaml_metadata) %}
 
-new_records AS (
-    SELECT *
-    FROM source_data src
-    {% if is_incremental() %}
-    WHERE NOT EXISTS (
-        SELECT 1 FROM existing_sats es
-        WHERE es.hk_<entity> = src.hk_<entity>
-          AND es.hd_<entity> = src.hd_<entity>
-    )
-    {% endif %}
-)
-
-SELECT 
-    *,
-    'Y' AS dss_is_current,
-    CAST(NULL AS DATETIME2) AS dss_end_date
-FROM new_records
+{{ automate_dv.sat(src_pk=metadata_dict["src_pk"], src_hashdiff=metadata_dict["src_hashdiff"],
+                   src_payload=metadata_dict["src_payload"], src_ldts=metadata_dict["src_ldts"],
+                   src_source=metadata_dict["src_source"], source_model=metadata_dict["source_model"]) }}
 ```
 
 ---
@@ -1160,58 +1034,38 @@ FROM new_records
 
 📄 **Vorlage:** [models/raw_vault/links/link_company_role.sql](../models/raw_vault/links/link_company_role.sql)
 
-**Minimales Template:**
+**Minimales Template (automate_dv):**
 
 ```sql
 {{ config(
-    materialized='incremental',
-    unique_key='hk_link_<entity1>_<entity2>',
-    as_columnstore=false
+    as_columnstore=false,
+    post_hook=["{{ create_hash_index('hk_link_<entity1>_<entity2>') }}"]
 ) }}
 
-WITH source_data AS (
-    SELECT DISTINCT
-        hk_link_<entity1>_<entity2>,
-        hk_<entity1>,
-        hk_<entity2>,
-        dss_load_date,
-        dss_record_source
-    FROM {{ ref('<concept>_<source>') }}
-    WHERE hk_<entity1> IS NOT NULL
-      AND hk_<entity2> IS NOT NULL
-),
+{%- set yaml_metadata -%}
+source_model: "<concept>_<source>"
+src_pk: "hk_link_<entity1>_<entity2>"
+src_fk:
+  - "hk_<entity1>"
+  - "hk_<entity2>"
+src_ldts: "dss_load_date"
+src_source: "dss_record_source"
+{%- endset -%}
 
-{% if is_incremental() %}
-existing_links AS (
-    SELECT hk_link_<entity1>_<entity2> FROM {{ this }}
-),
-{% endif %}
+{% set metadata_dict = fromyaml(yaml_metadata) %}
 
-new_records AS (
-    SELECT *
-    FROM source_data src
-    {% if is_incremental() %}
-    WHERE NOT EXISTS (
-        SELECT 1 FROM existing_links el
-        WHERE el.hk_link_<entity1>_<entity2> = src.hk_link_<entity1>_<entity2>
-    )
-    {% endif %}
-)
-
-SELECT * FROM new_records
+{{ automate_dv.link(src_pk=metadata_dict["src_pk"], src_fk=metadata_dict["src_fk"],
+                    src_ldts=metadata_dict["src_ldts"], src_source=metadata_dict["src_source"],
+                    source_model=metadata_dict["source_model"]) }}
 ```
 
-**Wichtig:** Der Link Hash Key muss im Staging berechnet werden:
+**Wichtig:** Der Link Hash Key wird im Staging berechnet — bei automate_dv.stage() über `hashed_columns`:
 
-```sql
--- In <concept>_<source>.sql
-CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-    CONCAT(
-        ISNULL(CAST(<entity1_bk> AS NVARCHAR(MAX)), ''),
-        '^^',
-        ISNULL(CAST(<entity2_bk> AS NVARCHAR(MAX)), '')
-    )
-), 2) AS hk_link_<entity1>_<entity2>
+```yaml
+hashed_columns:
+  hk_link_<entity1>_<entity2>:
+    - "<entity1_bk>"
+    - "<entity2_bk>"
 ```
 
 ---
@@ -1464,66 +1318,22 @@ Ein **Dependent Child Satellite** wird verwendet, wenn ein Link zusätzliche Sch
 
 Die Staging-View muss für DC Satellites **zusätzliche Hash-Berechnungen** enthalten:
 
-```sql
--- Beispiel: <concept>_order_item.sql (mit DCK: line_item_no)
+Bei automate_dv.stage() kompakt über `hashed_columns` — der **Link-Hash enthält die DCKs**, der DC-Hashdiff ebenfalls:
 
-{%- set hashdiff_columns = ['quantity', 'unit_price', 'discount'] -%}
-{%- set hashdiff_dc_columns = ['line_item_no', 'quantity', 'unit_price', 'discount'] -%}
-
-WITH source AS (
-    SELECT * FROM {{ source('staging', 'ext_<concept>_order_item') }}
-),
-
-staged AS (
-    SELECT
-        -- HASH KEY (Entity)
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            ISNULL(CAST(order_id AS NVARCHAR(MAX)), '')
-        ), 2) AS hk_order_item,
-        
-        -- LINK HASH KEY (Order → Product + DCK)
-        -- Enthält DCK für DC Sat Eindeutigkeit
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            CONCAT(
-                ISNULL(CAST(order_id AS NVARCHAR(MAX)), ''),
-                '^^',
-                ISNULL(CAST(product_id AS NVARCHAR(MAX)), ''),
-                '^^',
-                ISNULL(CAST(line_item_no AS NVARCHAR(MAX)), '')  -- DCK
-            )
-        ), 2) AS hk_link_order_product,
-        
-        -- HASH DIFF (Standard Satellite)
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            CONCAT(
-                {%- for col in hashdiff_columns %}
-                ISNULL(CAST({{ col }} AS NVARCHAR(MAX)), ''){{ ',' if not loop.last }}
-                {%- endfor %}
-            )
-        ), 2) AS hd_order_item,
-        
-        -- HASH DIFF (DC Satellite - inkl. DCK)
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            CONCAT(
-                {%- for col in hashdiff_dc_columns %}
-                ISNULL(CAST({{ col }} AS NVARCHAR(MAX)), ''){{ ',' if not loop.last }}
-                {%- endfor %}
-            )
-        ), 2) AS hd_order_product_dc,
-        
-        -- Business Keys + Payload + Metadata
-        order_id,
-        product_id,
-        line_item_no,  -- DCK
-        quantity,
-        unit_price,
-        discount,
-        dss_record_source,
-        dss_load_date
-    FROM source
-)
-
-SELECT * FROM staged
+```yaml
+# Beispiel: <concept>_order_item.sql (DCK: line_item_no)
+hashed_columns:
+  hk_order_item: "order_id"
+  hk_link_order_product:            # Link-Hash inkl. DCK!
+    - "order_id"
+    - "product_id"
+    - "line_item_no"
+  hd_order_item:                    # Hashdiff Standard-Sat
+    is_hashdiff: true
+    columns: ["quantity", "unit_price", "discount"]
+  hd_order_product_dc:              # Hashdiff DC-Sat (inkl. DCK)
+    is_hashdiff: true
+    columns: ["line_item_no", "quantity", "unit_price", "discount"]
 ```
 
 #### DC Satellite Model
@@ -1579,52 +1389,18 @@ Ein **Multi-Active Satellite** erlaubt **mehrere gleichzeitig gültige Werte** f
 
 #### Staging-View Anforderungen
 
-```sql
--- Beispiel: <concept>_employee_phone.sql (mit CDK: phone_type)
+Bei automate_dv.stage() kompakt über `hashed_columns` — der MA-Hashdiff enthält den **CDK**:
 
-{%- set hashdiff_columns = ['phone_number', 'is_primary'] -%}
-{%- set hashdiff_ma_columns = ['phone_type', 'phone_number', 'is_primary'] -%}
-
-WITH source AS (
-    SELECT * FROM {{ source('staging', 'ext_<concept>_employee_phone') }}
-),
-
-staged AS (
-    SELECT
-        -- HASH KEY (Entity)
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            ISNULL(CAST(employee_id AS NVARCHAR(MAX)), '')
-        ), 2) AS hk_employee,
-        
-        -- HASH DIFF (für regulären Satellite)
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            CONCAT(
-                {%- for col in hashdiff_columns %}
-                ISNULL(CAST({{ col }} AS NVARCHAR(MAX)), ''){{ ',' if not loop.last }}
-                {%- endfor %}
-            )
-        ), 2) AS hd_employee,
-        
-        -- HASH DIFF (MA Satellite - inkl. CDK)
-        CONVERT(CHAR(64), HASHBYTES('SHA2_256', 
-            CONCAT(
-                {%- for col in hashdiff_ma_columns %}
-                ISNULL(CAST({{ col }} AS NVARCHAR(MAX)), ''){{ ',' if not loop.last }}
-                {%- endfor %}
-            )
-        ), 2) AS hd_employee_ma,
-        
-        -- Business Key + CDK + Payload + Metadata
-        employee_id,
-        phone_type,      -- CDK (Child Dependent Key)
-        phone_number,
-        is_primary,
-        dss_record_source,
-        dss_load_date
-    FROM source
-)
-
-SELECT * FROM staged
+```yaml
+# Beispiel: <concept>_employee_phone.sql (CDK: phone_type)
+hashed_columns:
+  hk_employee: "employee_id"
+  hd_employee:                      # Hashdiff regulärer Sat
+    is_hashdiff: true
+    columns: ["phone_number", "is_primary"]
+  hd_employee_ma:                   # Hashdiff MA-Sat (inkl. CDK)
+    is_hashdiff: true
+    columns: ["phone_type", "phone_number", "is_primary"]
 ```
 
 #### MA Satellite Model
@@ -2144,11 +1920,15 @@ dbt run --target <tenant>
 dbt test --target <tenant>
 ```
 
-### Full Refresh (Schema-Änderungen)
+### Schema-Änderungen (neue Spalten)
 
 ```bash
-# Bei Spaltenänderungen: Full Refresh erforderlich!
-dbt run --full-refresh --target <tenant>
+# KEIN Full Refresh nötig: on_schema_change: append_new_columns
+# ergänzt neue Spalten beim normalen Run — Historie bleibt erhalten.
+dbt run --select <betroffene_modelle> --target <tenant>
+
+# --full-refresh nur bewusst einsetzen (vernichtet Historie inkrementeller
+# Objekte!) — z. B. bei Typänderungen bestehender Spalten oder Static Tables.
 ```
 
 ---
@@ -2161,7 +1941,7 @@ dbt run --full-refresh --target <tenant>
 |--------|---------|--------|
 | `Column not found` | Spalte fehlt in External Table | `sources.yml` prüfen, `stage_external_sources` ausführen |
 | `Columnstore not supported` | Azure SQL Basic Tier | `+as_columnstore: false` in Config |
-| `Hash Diff changed unexpectedly` | Neue Spalte ohne Full Refresh | `dbt run --full-refresh` |
+| `Hash Diff changed unexpectedly` | Hashdiff-Spaltenliste wurde geändert | Erwartetes einmaliges Delta je Schlüssel — dokumentieren; kein Full Refresh (Historienverlust!) |
 | `Duplicate key` | Unique-Constraint verletzt | Hash Key Berechnung prüfen |
 | `Cross-database reference` | Hardcoded Database | `{{ target.database }}` verwenden |
 | `Login timeout` | Azure Token abgelaufen | `az login` ausführen |
@@ -2215,7 +1995,7 @@ dbt debug
 □ Spalte in Hash Diff (falls getrackt)
 □ Spalte in Satellite hinzugefügt
 □ dbt run-operation stage_external_sources
-□ dbt run --full-refresh --select <concept>_* sat_*
+□ dbt run --select <concept>_<entity> raw_vault.<concept>.sat_<entity>   (kein Full Refresh — on_schema_change!)
 □ dbt test
 ```
 
@@ -2226,7 +2006,7 @@ dbt debug
 □ SQL kompiliert und geprüft
 □ Keine hardcoded Datenbanknamen
 □ +as_columnstore: false gesetzt
-□ Hash-Separator ist '^^'
+□ Hashing durchgängig via automate_dv (hash_override.sql, concat_string '||') — Berechnungsweg je Entity nicht mischen
 □ Git committed und gepusht
 □ PR erstellt und CI erfolgreich ✓
 ```
