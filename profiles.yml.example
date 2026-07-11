@@ -1,9 +1,9 @@
-# Example profiles.yml. Copy it to the project root as `profiles.yml` (already
-# gitignored) — dbt finds a profiles.yml in the current working directory
-# automatically, no ~/.dbt/ or --profiles-dir needed. Never commit real
-# credentials; this .example file has none.
+# Example ~/.dbt/profiles.yml — copy this to your dbt profiles directory.
+# This file is NOT read by dbt from inside the project; it documents the
+# expected shape of your local/CI profile. Never commit real credentials.
 #
-#   cp profiles.yml.example profiles.yml
+#   mkdir -p ~/.dbt
+#   cp profiles.yml.example ~/.dbt/profiles.yml
 #   # then fill in <SQL_USER> / <SQL_PASSWORD> or switch to `authentication: cli`
 
 datavault:

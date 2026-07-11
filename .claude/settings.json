@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dbt parse:*)",
+      "Bash(dbt compile:*)",
+      "Bash(dbt ls:*)",
+      "Bash(dbt list:*)",
+      "Bash(dbt debug:*)",
+      "Bash(dbt deps:*)",
+      "Bash(dbt test:*)",
+      "Bash(dbt show:*)",
+      "Bash(dbt docs generate:*)",
+      "Bash(.venv/bin/dbt parse:*)",
+      "Bash(.venv/bin/dbt compile:*)",
+      "Bash(.venv/bin/dbt ls:*)",
+      "Bash(.venv/bin/dbt debug:*)",
+      "Bash(.venv/bin/dbt deps:*)",
+      "Bash(.venv/bin/dbt test:*)",
+      "Bash(.venv/bin/python scripts/validate_er_sources.py:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/dv_guard.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/dv_lint.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

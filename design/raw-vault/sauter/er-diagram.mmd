@@ -1,0 +1,95 @@
+erDiagram
+    %% Raw Vault Zielmodell: vault_sauter (+ vault_epd Ausblick)
+    %% Quelle: design/raw-vault/sauter/overview.md
+
+    hub_werk {
+        char64 hk_werk PK
+        string laborid BK
+        string firmenid BK
+        string werkid BK
+    }
+    hub_rezeptbasis {
+        char64 hk_rezeptbasis PK
+        string laborid BK
+        string firmenid BK
+        string werkid BK
+        string rezeptsorte BK
+    }
+    hub_rezept {
+        char64 hk_rezept PK
+        string laborid BK
+        string firmenid BK
+        string rezeptid BK
+    }
+    hub_komponente {
+        char64 hk_komponente PK
+        string laborid BK
+        string firmenid BK
+        string kompotyp BK
+        string kompoid BK
+    }
+    hub_lieferantenwerk {
+        char64 hk_lieferantenwerk PK
+        string laborid BK
+        string lieferantenid BK
+        string lieferantenwerkid BK
+    }
+    hub_epd_material {
+        char64 hk_epd_material PK
+        string epd_quelle BK
+        string epd_id BK
+    }
+
+    sat_werk {
+        string name
+        string kuerzel
+        string werktyp
+    }
+    sat_rezeptbasis {
+        string expositionsklasse
+        string festigkeitsklasse
+        string konsistenz
+        string groestkorn
+    }
+    sat_stoffraum {
+        int dosierposition
+        decimal menge_anteil
+        decimal masse
+        decimal volumen
+        decimal feuchte
+        decimal anrechnungsfaktor
+    }
+    sat_komponente_je_typ {
+        string bezeichnung
+        string artikelnummer
+        string artenid
+        decimal dichte
+    }
+    sat_preis {
+        decimal preis
+    }
+    sat_epd_material_nmd {
+        decimal gwp_a1
+        decimal gwp_a2
+        decimal gwp_a3
+        string einheit
+        string version
+    }
+
+    link_rezeptbasis_rezept }o--|| hub_rezeptbasis : ""
+    link_rezeptbasis_rezept }o--|| hub_rezept : ""
+    link_rezept_komponente }o--|| hub_rezept : ""
+    link_rezept_komponente }o--|| hub_komponente : ""
+    link_werk_komponente_preis }o--|| hub_werk : ""
+    link_werk_komponente_preis }o--|| hub_komponente : ""
+    link_komponente_lieferantenwerk }o--|| hub_komponente : ""
+    link_komponente_lieferantenwerk }o--|| hub_lieferantenwerk : ""
+    link_komponente_epd }o--|| hub_komponente : "Material-Matching"
+    link_komponente_epd }o--|| hub_epd_material : ""
+
+    hub_werk ||--o{ sat_werk : ""
+    hub_rezeptbasis ||--o{ sat_rezeptbasis : ""
+    link_rezept_komponente ||--o{ sat_stoffraum : "Mengen fuer GWP"
+    hub_komponente ||--o{ sat_komponente_je_typ : "je KOMPOTYP ein Sat"
+    link_werk_komponente_preis ||--o{ sat_preis : ""
+    hub_epd_material ||--o{ sat_epd_material_nmd : "GWP-Werte"
