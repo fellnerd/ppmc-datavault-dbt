@@ -18,3 +18,8 @@ __pycache__/
 
 # Credentials
 profiles.yml
+
+# Claude Code (lokal, nicht Teil des geteilten Repos)
+.claude/
+CLAUDE.md
+docs/CLAUDE.md
