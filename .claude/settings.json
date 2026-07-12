@@ -18,15 +18,16 @@
       "Bash(.venv/bin/dbt test:*)"
     ]
   },
+  "enabledPlugins": {
+    "dv-toolkit@datavault-dbt": true
+  },
   "extraKnownMarketplaces": {
     "datavault-dbt": {
       "source": {
         "source": "github",
         "repo": "fellnerd/datavault-dbt-boilerplate"
-      }
+      },
+      "autoUpdate": true
     }
-  },
-  "enabledPlugins": {
-    "dv-toolkit@datavault-dbt": true
   }
 }
