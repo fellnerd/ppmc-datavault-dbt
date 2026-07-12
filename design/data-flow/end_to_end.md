@@ -5,155 +5,102 @@
 ```mermaid
 flowchart TB
     subgraph Sources["🗄️ Quellsysteme"]
-        PG[(PostgreSQL<br/><source_system>)]
-        AW[(SQL Server<br/>AdventureWorks)]
-        API[/REST API<br/><concept>/]
+        SAUTER[(Sauter Labor-DB<br/>Primärdaten: Rezepturen)]
+        EPD[(EPD-Register<br/>millieudatabase.nl, geplant)]
+        SEED[["ref_role Seed<br/>(Starter-Beispiel)"]]
     end
-    
+
     subgraph Integration["⚙️ Azure Integration"]
-        SYN[Synapse<br/>Pipeline]
+        ADF[Azure Data Factory]
         ADLS[("ADLS Gen2<br/>Parquet Files")]
     end
-    
-    subgraph Staging["📥 Staging Layer"]
-        EXT["External Tables<br/>(stg.ext_*)"]
-        STG["Staging Views<br/>(stg.stg_*)"]
+
+    subgraph Staging["📥 Staging Layer (schema stg)"]
+        EXT["External Tables<br/>stg.ext_sauter_test_*"]
+        STG["Staging Views<br/>stg.stg_sauter_*, stg.stg_role"]
     end
-    
+
     subgraph RawVault["🏛️ Raw Vault"]
-        HUBS["Hubs<br/>(vault.hub_*)"]
-        LINKS["Links<br/>(vault.link_*)"]
-        SATS["Satellites<br/>(vault.sat_*)"]
+        HUBS_C["vault.hub_role"]
+        SATS_C["vault.sat_role"]
+        HUBS_S["vault_sauter.hub_* (geplant)"]
+        LINKS_S["vault_sauter.link_* (geplant)"]
+        SATS_S["vault_sauter.sat_* (geplant)"]
     end
-    
-    subgraph BusinessVault["📊 Business Vault"]
-        PITS["PITs<br/>(vault.pit_*)"]
-        BRIDGES["Bridges<br/>(vault.bridge_*)"]
-        CALC["Calculated Sats"]
+
+    subgraph BusinessVault["📊 Business Vault (geplant)"]
+        EFFSAT["Eff-Sat: Material-Matching<br/>Komponente ↔ EPD"]
     end
-    
-    subgraph Mart["📈 Data Mart"]
-        DIM["Dimensions<br/>(mart.dim_*)"]
-        FACT["Facts<br/>(mart.fact_*)"]
-        VIEWS["Views<br/>(mart.v_*)"]
+
+    subgraph Mart["📈 Mart"]
+        DIMDATE["mart._common.dim_date<br/>(generiert, quellunabhängig)"]
     end
-    
-    %% Connections
-    PG --> SYN
-    AW --> SYN
-    API --> SYN
-    SYN --> ADLS
-    
+
+    SAUTER -->|DB-Connector| ADF
+    EPD -.->|REST API, geplant| ADF
+    ADF --> ADLS
     ADLS --> EXT
     EXT --> STG
-    
-    STG --> HUBS
-    STG --> LINKS
-    STG --> SATS
-    
-    HUBS --> PITS
-    SATS --> PITS
-    LINKS --> BRIDGES
-    HUBS --> BRIDGES
-    SATS --> CALC
-    
-    PITS --> DIM
-    BRIDGES --> FACT
-    CALC --> FACT
-    DIM --> VIEWS
-    FACT --> VIEWS
+
+    SEED --> STG
+
+    STG -->|stg_role| HUBS_C
+    STG -->|stg_role| SATS_C
+    STG -.->|stg_sauter_*, geplant| HUBS_S
+    STG -.->|stg_sauter_*, geplant| LINKS_S
+    STG -.->|stg_sauter_*, geplant| SATS_S
+
+    LINKS_S -.-> EFFSAT
 ```
 
 ## Schicht-Details
 
 ### 1. Quellsysteme → ADLS
 
-| Quelle | Pipeline | Ziel-Pfad | Frequenz |
-|--------|----------|-----------|----------|
-| `<source_system>.company_client` | `pl_<source_system>` | `/raw/<source_system>/company_client/` | Daily |
-| `<source_system>.countries` | `pl_<source_system>` | `/raw/<source_system>/countries/` | Daily |
-| AdventureWorks.Customer | pl_adventureworks | `/raw/aw/customer/` | Daily |
+| Quelle | Ziel-Pfad | Status |
+|--------|-----------|--------|
+| Sauter Labor-DB | `sauter-test/*.parquet` | ✅ angebunden (267 External Tables) |
+| EPD-Register (millieudatabase.nl) | `epd/*.parquet` | ⏳ geplant (Phase 2) |
 
-### 2. ADLS → Staging
+Details: [design/staging/source_mapping.md](../staging/source_mapping.md)
 
-```mermaid
-flowchart LR
-    PARQUET[/"company_client/*.parquet"/]
-    EXT["ext_company_client<br/>(External Table)"]
-    STG["stg_company<br/>(View)"]
-    
-    PARQUET -->|"OPENROWSET"| EXT
-    EXT -->|"+ hk_company<br/>+ hd_company<br/>+ dss_*"| STG
-```
-
-### 3. Staging → Raw Vault
+### 2. Staging → Raw Vault (implementiert: Starter-Beispiel)
 
 ```mermaid
 flowchart LR
-    STG["stg_company"]
-    
-    HUB["hub_company"]
-    SAT["sat_company"]
-    LINK["link_company_country"]
-    
-    STG -->|"hk, bk, dss"| HUB
-    STG -->|"hk, hd, attrs"| SAT
-    STG -->|"hk_company,<br/>hk_country"| LINK
+    SEED[["ref_role (seed)"]]
+    STG["stg_role<br/>(hk_role, hd_role, dss_*)"]
+    HUB["hub_role"]
+    SAT["sat_role"]
+
+    SEED -->|automate_dv.stage| STG
+    STG -->|hk_role, role_code, dss_*| HUB
+    STG -->|hk_role, hd_role, role_name, role_description| SAT
 ```
 
-### 4. Raw Vault → Business Vault
+### 3. Staging → Raw Vault (geplant: Sauter)
 
-```mermaid
-flowchart LR
-    HUB["hub_company"]
-    SAT1["sat_company"]
-    SAT2["sat_company_ext"]
-    
-    PIT["pit_company"]
-    
-    HUB --> PIT
-    SAT1 --> PIT
-    SAT2 --> PIT
-```
+Siehe [design/raw-vault/sauter/er-diagram.mmd](../raw-vault/sauter/er-diagram.mmd) für das vollständige Zielmodell (Hubs `hub_werk`, `hub_rezept`, `hub_rezeptbasis`, `hub_komponente`, `hub_lieferantenwerk`; Links inkl. `link_rezept_komponente` mit `sat_stoffraum` als Mengenbasis für `GWP_m³ = Σ (Mengeᵢ × GWPᵢ)`).
 
-## dbt DAG (vereinfacht)
+## dbt DAG (aktueller Stand)
 
 ```mermaid
 flowchart LR
     subgraph Staging
-        stg_company
-        stg_country
+        stg_role
     end
-    
-    subgraph Hubs
-        hub_company
-        hub_country
+
+    subgraph RawVault["Raw Vault (_common)"]
+        hub_role
+        sat_role
     end
-    
-    subgraph Links
-        link_company_country
+
+    subgraph Mart
+        dim_date
     end
-    
-    subgraph Satellites
-        sat_company
-        sat_country
-        eff_sat_company_country
-    end
-    
-    subgraph BusinessVault
-        pit_company
-    end
-    
-    stg_company --> hub_company
-    stg_company --> sat_company
-    stg_country --> hub_country
-    stg_country --> sat_country
-    
-    hub_company --> link_company_country
-    hub_country --> link_company_country
-    
-    link_company_country --> eff_sat_company_country
-    
-    hub_company --> pit_company
-    sat_company --> pit_company
+
+    stg_role --> hub_role
+    stg_role --> sat_role
 ```
+
+`dim_date` ist eine generierte, quellunabhängige Datumsdimension (2020–2035) ohne Upstream-Abhängigkeit im DAG.

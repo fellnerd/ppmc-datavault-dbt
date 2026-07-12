@@ -53,3 +53,11 @@ Peripherie (bewusst noch nicht modelliert): `import_lieferscheine` (+ `_chargen`
 | millieudatabase.nl Export | `stg_epd_nmd_material` | `hub_epd_material`, `sat_epd_material__nmd` |
 
 Material-Matching (Business Vault) erzeugt `link_komponente_epd` + Eff-Sat.
+
+## Starter-Beispiel (implementiert, kein Quellsystem)
+
+| Quelle | Staging View | Vault-Objekt |
+|--------|--------------|--------------|
+| `ref_role` (Seed) | `stg_role` | `hub_role`, `sat_role` |
+
+Beweist die Pipeline `stg → hub → sat` end-to-end (Hash-/Hashdiff-Berechnung via `automate_dv.stage()`), unabhängig von Sauter/EPD.

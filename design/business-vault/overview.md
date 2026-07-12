@@ -1,68 +1,23 @@
 # Business Vault - Gesamtübersicht
 
-## Entity-Relationship Diagramm
-
-```mermaid
-erDiagram
-    %% === PITs ===
-    PIT_COMPANY {
-        char64 hk_company PK
-        datetime dss_load_date PK
-        datetime sat_company_ldts FK
-        datetime sat_company_ext_ldts FK
-    }
-
-    %% === Referenzen zu Raw Vault ===
-    HUB_COMPANY {
-        char64 hk_company PK
-    }
-    
-    SAT_COMPANY {
-        char64 hk_company PK,FK
-        datetime dss_load_date PK
-    }
-    
-    SAT_COMPANY_EXT {
-        char64 hk_company PK,FK
-        datetime dss_load_date PK
-    }
-
-    %% === Relationships ===
-    HUB_COMPANY ||--|| PIT_COMPANY : "indexed_by"
-    PIT_COMPANY }o--|| SAT_COMPANY : "points_to"
-    PIT_COMPANY }o--|| SAT_COMPANY_EXT : "points_to"
-```
-
 ## Implementierungsstatus
 
 | Objekt | Status | dbt Model | Beschreibung |
 |--------|--------|-----------|--------------|
-| `pit_company` | ✅ | `models/business_vault/pit_company.sql` | PIT für Company |
-| `bridge_company_projects` | ⏳ | - | Geplant |
+| — | — | — | Noch keine Business-Vault-Objekte implementiert (`models/business_vault/` enthält aktuell nur die leere `_business_vault__models.yml`) |
 
-## Geplante Erweiterungen
+## Geplante Objekte
 
-### Bridges
+Business-Vault-Objekte folgen, sobald der Sauter Raw Vault ([design/raw-vault/sauter/overview.md](../raw-vault/sauter/overview.md)) implementiert ist:
 
-```mermaid
-flowchart LR
-    subgraph "Bridge: Company → Projects → Invoices"
-        HC[hub_company]
-        LP[link_company_project]
-        HP[hub_project]
-        LI[link_project_invoice]
-        HI[hub_invoice]
-        
-        HC --> LP --> HP --> LI --> HI
-    end
-    
-    BRIDGE["bridge_company_invoices"]
-    
-    HC -.->|"denormalized"| BRIDGE
-    HI -.->|"denormalized"| BRIDGE
-```
+| Objekt | Zweck |
+|--------|-------|
+| Eff-Sat zu `link_komponente_epd` | Gültigkeit/Regel/Konfidenz des Material-Matchings (Komponente ↔ EPD, regelbasiert) |
 
-### Berechnete Satellites
+Weitere PITs/Bridges sind bei Bedarf zu ergänzen — siehe Templates.
 
-- `sat_company_calculated` - KPIs wie Umsatz, Anzahl Projekte
-- `sat_customer_calculated` - Customer Lifetime Value
+## Templates
+
+Siehe:
+- [_template_pit.md](_template_pit.md)
+- [_template_bridge.md](_template_bridge.md)
