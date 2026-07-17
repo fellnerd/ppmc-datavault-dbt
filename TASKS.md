@@ -5,12 +5,12 @@
 ## Phase 1 — Fachliche Abstimmung
 
 - [ ] Workshops mit ASCEM: relevante PCR-Anforderungen festlegen
-- [ ] Offene Quellsystem-Fragen mit Sauter klären → [docs/ER_VALIDIERUNG_SAUTER.md](docs/ER_VALIDIERUNG_SAUTER.md) §4:
-  - [ ] KOMPOTYP-IDs für Farbe/Fasern/Zusatzstoff
-  - [ ] Führende Preistabelle (kompo_preise vs. stoffraum_preise vs. rezept_preise)
-  - [ ] Rezeptstamm: kommunikation_extrezeptbasis vs. stoffraum_basisdaten/sorten
-  - [ ] Soll- vs. Ist-Bilanzierung (Rezeptur vs. Lieferschein-Mengen)
-  - [ ] Bedeutung ANRECHNUNGSFAKTOR für die GWP-Formel
+- [x] Offene Quellsystem-Fragen mit Sauter klären → [docs/ER_VALIDIERUNG_SAUTER.md](docs/ER_VALIDIERUNG_SAUTER.md) §4/§5 (Fachgespräch 2026-07-14):
+  - [x] KOMPOTYP-IDs: offizielle Konstanten erhalten (0–7 + 100; **6 = Flugasche**, Tabelle KOMPO_FUELLER!) → ref_kompotyp-Seed
+  - [x] Führende Preistabelle: kompo_preise + stoffraum_preise — für GWP nicht benötigt
+  - [x] Rezeptstamm: **stoffraum_basisdaten** + stoffraum_komponenten; annahme_basis irrelevant
+  - [x] Soll- vs. Ist-Bilanzierung: beides — Ist über import_lieferschein_dosierungen
+  - [ ] Bedeutung ANRECHNUNGSFAKTOR für die GWP-Formel (k-Wert-Hypothese, unbestätigt)
 - [ ] Zugang millieudatabase.nl (REST API) organisieren
 
 ## Phase 2 — Prototyp (PoC)

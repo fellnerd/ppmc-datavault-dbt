@@ -58,7 +58,36 @@ Das ER kennt Typ 0/1/2/3/6 (Zuschlag/Bindemittel/Zusatzmittel/Wasser/Füller). E
 
 ### 4. Offene Punkte für den Fachbereich (Sauter/ASCEM)
 
-1. KOMPOTYP-IDs für Farbe/Fasern/Zusatzstoff bestätigen (und Abgrenzung Füller ↔ Zusatzstoff — beide nutzen ZUSATZSTOFFART*)
-2. Führende Quelle für Rezeptstamm und Preise festlegen (stoffraum_* vs. kommunikation_* vs. kompo_*)
-3. Soll- vs. Ist-Bilanzierung: Rezeptur (`stoffraum_komponenten`) oder Lieferschein-Mengen (`import_lieferscheine`) als Mengenbasis für den GWP-Rechner?
-4. Bedeutung `ANRECHNUNGSFAKTOR` in `stoffraum_komponenten` für die GWP-Formel klären (k-Wert-Anrechnung?)
+> **Update 2026-07-14** — Fachgespräch mit Sauter geführt, Antworten unten eingearbeitet.
+> Aussagen wurden gegen die tatsächlichen Spaltenlisten in `sources.yml` verifiziert (Transkripte per ChatGPT aufgezeichnet, Transkriptionsfehler möglich — kritische Aussagen datenseitig gegengeprüft).
+
+1. **KOMPOTYP-IDs — vollständig beantwortet (E-Mail Sauter, 2026-07-14):** 0 Gestein, 1 Zement, 2 Zusatzmittel, 3 Wasser, 4 Zusatzstoff, 5 Farbe, **6 Flugasche** (Tabelle heißt irreführend `KOMPO_FUELLER_FIRMA`!), 7 Fasern, 100 Undefiniert. Vollständiges Mapping: [QUELLSYSTEM_SAUTER.md](QUELLSYSTEM_SAUTER.md). Als **Referenzdatentabelle/Seed** pflegen, nicht hartkodieren. Die „Füller ↔ Zusatzstoff"-Abgrenzung ist damit erklärt: Typ 4 und 6 teilen sich die ZUSATZSTOFFART*-Referenz. Typ 6 = Flugasche erklärt zudem den k-Wert 0.4 exakt an Typ 1/6 (§6).
+2. **Rezeptstamm & Preise — beantwortet:** Rezeptstamm ist **`stoffraum_basisdaten`** (Kopf, Ebene Firma: LABORID+FIRMENID+REZEPTID — verifiziert ✅) + **`stoffraum_komponenten`** (Positionen) — „mit diesen zwei Tabellen haben wir gewonnen". **`annahme_basis` ist für den GWP-Rechner irrelevant** (Prüf-/Annahmekontext). Relevante Preistabellen sind nur `kompo_preise` (werksbezogen, Herstellkosten) und `stoffraum_preise` (rezeptbezogen: Verkaufs-/Sonder-/Rabattpreise, gültig-ab) — **für GWP nicht benötigt**, optional später für Margen-Analysen.
+3. **Soll- vs. Ist-Bilanzierung — beantwortet: beides.** GWP soll auf drei Ebenen berechenbar sein: Rezeptbasis (Soll), Chargen- und Lieferschein-/Baustellenbasis (Ist). Für die Ist-Berechnung ist **`import_lieferschein_dosierungen`** die zentrale Tabelle (Mengen je Material und Charge). Hierarchie: **Lieferschein → Charge → Dosierung → Komponente → EPD**; die unteren Ebenen erben die Schlüssel der oberen (LABORID, FIRMENID, WERKID, LIEFERSCHEINNUMMER, IDENTID, TEILREZEPTID, CHARGE — verifiziert ✅). Achtung: **Ein Lieferschein ≠ ein Rezept** (TEILREZEPTID; mehrere Chargen/Fertigteilproduktion).
+4. **`ANRECHNUNGSFAKTOR` — weiter offen.** Neuer Datenpunkt: Das Feld existiert auch in `import_lieferschein_dosierungen`, dort direkt neben `KOMPONENTEISTFLUGASCHE` — stützt die k-Wert-Hypothese (Anrechnung von Zusatzstoffen wie Flugasche), von Sauter aber noch nicht bestätigt.
+
+### 5. Weitere Erkenntnisse aus dem Fachgespräch (2026-07-14)
+
+- **`kompo_komponentenverbund`: irrelevant → ignorieren.** Aktuell leer; dient der firmenübergreifenden Komponentenverwaltung und „Phantom-Komponenten" (BE/NL: ausgewiesener Zement ≠ dosierte Rohstoffe; in DE nicht zulässig). Damit ist das vermutete Doppelzählungsrisiko vom Tisch.
+- **Mengenlogik `stoffraum_komponenten`:** `MENGE_ANTEIL` trägt je nach Komponententyp **absolute kg** (z. B. 320 kg Zement; `MASSE` dann leer) **oder Prozent** (z. B. Wasser 100 %, Fließmittel % vom Zementgehalt) — die berechnete Masse steht dann in `MASSE`. Werte `-1` bedeuten „nicht verwendet / wird berechnet". → Im Business Vault eine Spalte „effektive Menge" ableiten; Logik je Typ mit Testrezept validieren (empfohlenes Vorgehen: 2 Gesteine → +Zement → +Fließmittel → +Wasser).
+- **Keine eigene Stoffraumberechnung nötig** — so die Aussage im Gespräch. *Die Datenprüfung (§6) relativiert das:* nur für Gestein (Typ 0) ist die berechnete MASSE persistiert; für %-Typen (Wasser, Zusatzmittel, Füller) muss die effektive Masse im Business Vault abgeleitet werden.
+- **Lieferschein-Familie** (alle in `sources.yml` vorhanden ✅): `import_lieferscheine` (Kopf/„Deckel": Kunde, Baustelle, Fahrzeug, Auftrag, Rezeptdaten) → `import_lieferschein_chargen` (WZWERTSOLL/WZWERTIST, Wasserkorrektur, Temperaturen, Mischzeiten) → `import_lieferschein_dosierungen` (je Material; KOMPOTYP, SOLLMENGE, SOLLMENGE_REZEPT_*, FEUCHTE_*) → `import_lieferschein_events` (Ereignis-Doku); `import_lieferschein_pruefungen` für V1 nicht nötig.
+- **EPD international:** Eine Komponente kann je Zielland unterschiedliche EPDs haben (DE/FR/BE/NL, in NL zusätzlich NKI) → Zuordnung **Komponente × Land × EPD** im Modell vorsehen.
+- **Scope V1** (Workshop-Konsens): Organisation (Labor/Firma/Werk), Komponenten, Rezepte, Lieferscheine, Chargen, Dosierungen, Events, Referenzdaten, EPD-Anbindung, GWP-Berechnung. Optional/später: Preise, Kalkulation, Prüfungen.
+- Die gelieferten Tabellen sind „Stand der Technik" — Arbeitsgrundlage bestätigt; Umsetzungsreihenfolge: **Komponenten → Rezepte → Vault-Entwurf → GWP-Berechnung → EPD-Anbindung**.
+
+### 6. Datenprüfung gegen die dev-Datenbank (2026-07-14, read-only)
+
+Alle Gesprächsaussagen wurden zusätzlich gegen die tatsächlichen Daten in `stg.ext_sauter_test_*` geprüft (Testdatenstand):
+
+| Prüfung | Ergebnis |
+|---|---|
+| `kompo_komponentenverbund` leer? | ✅ 0 Zeilen — „ignorieren" bestätigt |
+| `annahme_basis` irrelevant? | ✅ plausibel — nur 1 Zeile im Testbestand |
+| BK `stoffraum_basisdaten` (LABORID+FIRMENID+REZEPTID) | ✅ eindeutig (26/26; schwache Evidenz, nach nächstem Load erneut prüfen) |
+| KOMPOTYP-Wertebereich | ⚠️ beobachtet **0–6** (nicht 0–7); **4 und 5 nur in Dosierungen**, nicht im Stoffraum; 7 unbelegt |
+| Mengenlogik | ⚠️ präzisiert: **Typ 0 (Gestein): MENGE_ANTEIL = −1, berechnete MASSE/VOLUMEN gefüllt. Typ 1/2/3/6: MENGE_ANTEIL trägt kg bzw. %, MASSE ist NULL** — die berechnete Masse wird für diese Typen *nicht* persistiert → für %-Typen (Wasser 100 %, Zusatzmittel % v. Zement, Füller) ist doch eine Ableitung im Business Vault nötig! „−1" als Sonderwert existiert nur in MENGE_ANTEIL; „nicht verwendet" bei MASSE ist NULL. |
+| Ist-Menge in `_dosierungen` | **Hypothese:** `GESTEINMENGE` = Ist-Menge (bei *allen* KOMPOTYPen befüllt — Name täuscht); `SOLLMENGE_REZEPT_MASSE` = Rezept-Soll (trocken); `SOLLMENGE` = feuchtekorrigiertes Soll (`+ FEUCHTE_MASSE`, additiv exakt nachvollziehbar). Abweichungsmuster (Wiegetoleranz bei Gestein) passt. **→ Von Sauter bestätigen lassen!** |
+| `ANRECHNUNGSFAKTOR` | 🔥 nur 3 Werte: **0.0 / 0.4 / 1.0**; 0.4 und 1.0 ausschließlich bei KOMPOTYP 1 und 6 — 0.4 ist der typische **Flugasche-k-Wert (EN 206)**, 1.0 voll anrechenbares Bindemittel → k-Wert-Hypothese stark gestützt |
+| `KOMPONENTEISTFLUGASCHE` | ⚠️ Anomalie: Flag (696×) nicht deckungsgleich mit Faktor 0.4; kommt auch bei KOMPOTYP 3 (Wasser, 233×) vor → mit Sauter klären |
+| Leere Tabellen | ⚠️ `import_lieferschein_events`: 0 Zeilen — fachlich leer oder ADF-Extraktionslücke? |
